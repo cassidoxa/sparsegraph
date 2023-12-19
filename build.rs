@@ -11,9 +11,9 @@ use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 
-const AUTOGEN_WARNING: &'static str =
+const AUTOGEN_WARNING: &str =
     "// THIS IS AN AUTOMATICALLY GENERATED MODULE. ANY CHANGES WILL BE OVERWRITTEN.";
-const IMPORTS: &'static str = r#"use std::num::NonZeroU16;
+const IMPORTS: &str = r#"use std::num::NonZeroU16;
 use crate::{graph::{NodeData, NodeType}, constants::{NUM_VERTICES_PADDED, NUM_EDGES_PADDED}};"#;
 // const TYPE_PREFIX: &'static str = r#"pub static STATIC_GRAPH: StaticGraph<NUM_VERTICES_PADDED, NUM_EDGES_PADDED> = StaticGraph {"#;
 
@@ -47,7 +47,7 @@ fn main() {
         "{}\n{}\n\n{}\n{}\n{}\n{}\n",
         AUTOGEN_WARNING, IMPORTS, np_string, nd_string, ep_string, ed_string
     );
-    std::fs::write(&path, &module_string).unwrap();
+    std::fs::write(path, module_string).unwrap();
 }
 
 /// Generate a new random graph that looks vaguely like our randomizer world model will. In
@@ -58,7 +58,7 @@ fn new_random() -> (
     [u16; NUM_EDGES_PADDED],
     [u16; NUM_EDGES_PADDED],
 ) {
-    let dist = WeightedIndex::new(&WEIGHTS).unwrap();
+    let dist = WeightedIndex::new(WEIGHTS).unwrap();
     let mut fill_done = false;
     let mut node_pointers = [NumWrapper::DEFAULT; NUM_VERTICES_PADDED];
     let node_data = [NodeData::DEFAULT; NUM_VERTICES_PADDED];
@@ -246,7 +246,7 @@ fn new_random() -> (
             NumWrapper(None) => continue,
         }
     }
-    let final_edge_index = u16::from(node_pointers[final_node_pointer_pos as usize].0.unwrap());
+    let final_edge_index = u16::from(node_pointers[final_node_pointer_pos].0.unwrap());
     let terminal_edge_position_offset = edge_pointers[final_edge_index as usize + 1..]
         .iter()
         .position(|&x| x == 0) // Neither array can point into zeroth position of other
@@ -264,27 +264,27 @@ fn new_random() -> (
     // boots OR hammer
     for _ in 0..3000 {
         let idx = rng.gen_range(1..NUM_EDGES);
-        edge_data[idx as usize] = 2u16;
+        edge_data[idx] = 2u16;
     }
     // hammer
     for _ in 0..1000 {
         let idx = rng.gen_range(1..NUM_EDGES);
-        edge_data[idx as usize] = 3u16;
+        edge_data[idx] = 3u16;
     }
     // gloves
     for _ in 0..200 {
         let idx = rng.gen_range(1..NUM_EDGES);
-        edge_data[idx as usize] = 4u16;
+        edge_data[idx] = 4u16;
     }
     // gloves AND hammer
     for _ in 0..200 {
         let idx = rng.gen_range(1..NUM_EDGES);
-        edge_data[idx as usize] = 5u16;
+        edge_data[idx] = 5u16;
     }
     // flute
     for _ in 0..200 {
         let idx = rng.gen_range(1..NUM_EDGES);
-        edge_data[idx as usize] = 6u16;
+        edge_data[idx] = 6u16;
     }
 
     (node_pointers, node_data, edge_pointers, edge_data)
@@ -302,7 +302,7 @@ impl std::fmt::Display for NumWrapper {
         write!(
             f,
             "NonZeroU16::new({})",
-            self.0.map_or(0u16, |n| u16::from(n))
+            self.0.map_or(0u16, u16::from)
         )
     }
 }
@@ -362,10 +362,10 @@ where
         for n in &self.0 {
             s.push_str(&n.to_string());
             if !std::ptr::eq(n, self.0.last().unwrap()) {
-                s.push_str(&sep);
+                s.push_str(sep);
             }
         }
-        s.push_str("]");
+        s.push(']');
         write!(f, "{}", s)
     }
 }

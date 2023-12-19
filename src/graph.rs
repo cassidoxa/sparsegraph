@@ -69,7 +69,7 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
         // length of the last edge sub-slice in .edge_pointers.
         // 2. That no two nodes point to the same edge sub-slice.
 
-        let maybe_start: u16 = self.node_pointers[v as usize].map_or(0, |n| u16::from(n));
+        let maybe_start: u16 = self.node_pointers[v as usize].map_or(0, u16::from);
         let end_candidates = &self.node_pointers[v.saturating_add(1) as usize..];
         let end_v = end_candidates.iter().find(|n| n.is_some());
         let end: u16 = match end_v {

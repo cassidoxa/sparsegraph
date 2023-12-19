@@ -162,10 +162,7 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
         self.search_stack.clear();
         self.search_stack.push(self.root);
         self.mark_seen(self.root);
-        match self.find(|n| n == &node) {
-            Some(_) => true,
-            None => false,
-        }
+        self.find(|n| n == &node).is_some()
     }
 
     /// Returns whether a node is reachable or not, checking previous traversals first.
@@ -257,16 +254,16 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
                 self.mark_visited(r);
                 match self.graph.node_pointers[r as usize] {
                     Some(_) => {
-                        let next_edge_slice = self.graph.get_neighbors_out(u16::from(r));
+                        let next_edge_slice = self.graph.get_neighbors_out(r);
                         self.push_slice(next_edge_slice);
-                        return Some(r);
+                        Some(r)
                     }
                     None => {
-                        return Some(r);
+                        Some(r)
                     }
                 }
             }
-            None => return None,
+            None => None,
         }
     }
 
@@ -322,14 +319,20 @@ pub struct DfsStack {
     ptr: u16,
 }
 
+impl Default for DfsStack {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DfsStack {
     pub fn new() -> Self {
-        let stack = DfsStack {
+        
+
+        DfsStack {
             buf: Box::new([NonZeroU16::new(0); SEARCH_STACK_SIZE]),
             ptr: 0,
-        };
-
-        stack
+        }
     }
 
     pub fn push(&mut self, n: u16) {
