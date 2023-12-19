@@ -7,7 +7,9 @@ requires the nightly version of the compiler because it uses some unstable featu
 +nightly to a cargo invocation to use it.
 
 **Test** - `cargo +nightly test`
+
 **Bench** - `cargo +nightly bench` (Might require gnuplot, probably not a very good bench.)
+
 **Main** - `cargo +nightly build --release` (Provides a binary that does nothing but search for every node in the graph.)
 
 ## Logic
