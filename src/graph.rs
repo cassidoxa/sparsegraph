@@ -139,7 +139,7 @@ impl NodeData {
 
 #[derive(Debug)]
 pub enum NodeType {
-    Place, // ie: "Region" in ER
+    Place, // ie: "Region" in ER, a logically distinct place where the player can just "be."
     Item,
     Door,
 }

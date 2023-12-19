@@ -62,7 +62,7 @@ pub enum Requirement {
 /// own logic (encoded in plain text) to be placed into the backing structure and used at
 /// randomize time.
 #[derive(Debug, Copy, Clone)]
-#[repr(align(8))]
+#[repr(align(4))] // We want to guarantee this type has a width of 8, not 6.
 pub struct RequirementNode {
     pub req: Requirement,
     pub and: Option<NonZeroU16>,

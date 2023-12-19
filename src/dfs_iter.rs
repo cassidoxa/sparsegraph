@@ -246,8 +246,6 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
     type Item = u16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        //let mut reachable = self.search_stack.last();
-        //let mut reachable = self.search_stack.pop();
         match self.search_stack.pop() {
             Some(i) => {
                 let r = u16::from(i);
@@ -258,9 +256,7 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
                         self.push_slice(next_edge_slice);
                         Some(r)
                     }
-                    None => {
-                        Some(r)
-                    }
+                    None => Some(r),
                 }
             }
             None => None,
@@ -268,46 +264,11 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
     }
 
     // A custom .find implementation will maybe beat the default implementation by a little bit.
-    //fn find<P>(&mut self, mut predicate: P) -> Option<Self::Item>
+    //fn find<P>(&mut self, mut check_found: P) -> Option<Self::Item>
     //where
     //    P: FnMut(&Self::Item) -> bool,
     //{
-    //    let mut edge_slice = match self.search_stack.last() {
-    //        Some(l) => l,
-    //        None => return None,
-    //    };
-    //    'dfs: loop {
-    //        let reachable = edge_slice
-    //            .iter()
-    //            .position(|n| !self.check_visited(*n) && self.check_access(*n));
-    //        match reachable {
-    //            Some(i) => {
-    //                let r = edge_slice[i];
-    //                self.mark_visited(r);
-    //                match self.graph.node_pointers[r as usize] {
-    //                    Some(_) => {
-    //                        let next_edge_slice = self.graph.get_neighbors_out(r);
-    //                        self.search_stack.push(next_edge_slice);
-    //                        match predicate(&r) {
-    //                            true => return Some(r as u16),
-    //                            false => continue 'dfs,
-    //                        }
-    //                    }
-    //                    None => match predicate(&r) {
-    //                        true => return Some(r),
-    //                        false => continue 'dfs,
-    //                    },
-    //                }
-    //            }
-    //            None => match self.search_stack.pop() {
-    //                Some(n) => {
-    //                    edge_slice = n;
-    //                    continue 'dfs;
-    //                }
-    //                None => return None,
-    //            },
-    //        }
-    //    }
+    //
     //}
 }
 
@@ -327,8 +288,6 @@ impl Default for DfsStack {
 
 impl DfsStack {
     pub fn new() -> Self {
-        
-
         DfsStack {
             buf: Box::new([NonZeroU16::new(0); SEARCH_STACK_SIZE]),
             ptr: 0,
