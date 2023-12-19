@@ -1,0 +1,35 @@
+[package]
+name = "sparsegraph"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }
+
+[build-dependencies]
+rand = { version = "0.8.4", features = ["rand_chacha", "min_const_gen"] }
+rand_chacha = { version = "0.3.1", features = ["simd"] }
+
+[[bench]]
+name = "dfs_traversal_benchmark"
+harness = false
+
+[profile.dev]
+opt-level = 2
+debug = true
+overflow-checks = false
+
+[profile.release]
+opt-level = 3
+debug = true
+rpath = false
+lto = true
+overflow-checks = false
+debug-assertions = false
+codegen-units = 1
+panic = "abort"
