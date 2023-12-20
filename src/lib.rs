@@ -2,6 +2,7 @@
 #![feature(iter_array_chunks)]
 #![feature(slice_as_chunks)]
 #![feature(unchecked_shifts)]
+#![feature(slice_split_at_unchecked)]
 //#![feature(generic_const_exprs)]
 //#![allow(dead_code)]
 

@@ -63,22 +63,27 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
 
     /// Get a slice containing a node's outgoing edges. Returns an empty slice if node has no
     /// outgoing edges.
+    #[inline(never)]
     pub fn get_neighbors_out(&'graph self, v: u16) -> &'graph [u16] {
+        // This is so ugly but it's branchless. There has to be a better way to coax the compiler
+        // into doing something like this.
+
         // This function relies on the following assumptions:
         // 1. That we place a terminating value in self.node_pointers that will give us the
         // length of the last edge sub-slice in .edge_pointers.
         // 2. That no two nodes point to the same edge sub-slice.
+        // 3. That no non-terminal node is followed by 7 terminal node values in .node_pointers.
 
         let maybe_start: u16 = self.node_pointers[v as usize].map_or(0, u16::from);
-        let end_candidates = &self.node_pointers[v.saturating_add(1) as usize..];
-        let end_v = end_candidates.iter().find(|n| n.is_some());
-        let end: u16 = match end_v {
-            Some(n) => u16::from(n.unwrap()),
-            // SAFETY: We statically ensure that there's a Some(NonZeroU16) after EVERY
-            // non-terminal node in self.node_pointers.
-            None => unsafe { std::hint::unreachable_unchecked() },
+        let (end_bytes, _) =
+            unsafe { &self.node_pointers[v.saturating_add(1) as usize..].split_at_unchecked(8) };
+        let (_, slice_u8, _) = unsafe { end_bytes.align_to::<u8>() };
+        //let ptr_128 = unsafe { std::mem::transmute::<&[Option<NonZeroU16>], &[u8]>(end_bytes) };
+        let end_128 = unsafe { u128::from_be_bytes(slice_u8.try_into().unwrap_unchecked()) };
+        let end_index = (end_128.leading_zeros() as u16).saturating_add(1) >> 4;
+        let end = unsafe {
+            u16::from(self.node_pointers[(v + 1 + end_index) as usize].unwrap_unchecked())
         };
-
         let start: u16 = end.saturating_sub(end.saturating_sub(maybe_start));
 
         &self.edge_pointers[start as usize..end as usize]
@@ -194,7 +199,7 @@ mod tests {
     //    println!("n: {:?}", &graph.node_pointers);
     //    println!("e: {:?}\n", &graph.edge_pointers);
     //    for i in 1..=20000 {
-    //        println!("next_node: {:?}", dfs_iter.search_resumable(i));
+    //        println!("next_node: {:?}", dfs_iter.next());
     //    }
     //}
 }
