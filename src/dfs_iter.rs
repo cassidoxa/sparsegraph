@@ -24,7 +24,7 @@ pub struct DfsIter<'graph, const M: usize, const N: usize> {
     pub collection_state: CollectionState,
     pub visited: Box<[u64; VISITED_BITFIELD_LEN]>,
     pub seen: Box<[u64; VISITED_BITFIELD_LEN]>,
-    pub edge_access: Box<[u64; ACCESS_BITFIELD_LEN]>,
+    pub edge_access: Box<[u64; VISITED_BITFIELD_LEN]>, // Just reusing this constant
     pub node_cache: NodeCache,
 }
 
@@ -195,23 +195,16 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
     /// Pushes the neighbor slice of a node onto our DFS stack. A neighbor is only pushed if it's
     /// accessible and hasn't been seen or visited previously. Before being pushed, a node is
     /// marked as seen.
-    pub fn push_slice(&mut self, slice: &[u16]) {
+    pub fn push_slices(&mut self, edge_pointers: &[u16], edge_indexes: (u16, u16)) {
+        let indexes = (edge_indexes.0..edge_indexes.1).step_by(1);
         // Inlining here to tell the borrow checker we don't need to borrow all of self. This could
         // definitely be improved but :shrug:
-        let visited = |n: u16| -> bool {
-            let bit_index = n as u32 & 0x0000003F;
-            let bitfield_index = n as usize >> 6;
-            let bitmask = Self::BITMASK_CUR >> bit_index;
-
-            (self.visited[bitfield_index] & bitmask) != 0
-        };
-
         let accessible = |n: u16| -> bool {
             let bit_index = n as u32 & 0x0000003F;
             let bitfield_index = n as usize >> 6;
             let bitmask = Self::BITMASK_CUR >> bit_index;
 
-            (self.edge_access[bitfield_index] & bitmask) != 0
+            (bitmask & self.edge_access[bitfield_index]) != 0
         };
 
         let seen = |n: u16| -> bool {
@@ -222,10 +215,11 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
             (self.seen[bitfield_index] & bitmask) != 0
         };
 
-        slice
+        edge_pointers
             .iter()
-            .filter(|&&n| !seen(n) && !visited(n) && accessible(n))
-            .for_each(|&n| self.node_cache.push(n));
+            .zip(indexes)
+            .filter(|(&n, d)| accessible(*d) && !seen(n))
+            .for_each(|(&n, _)| self.node_cache.push(n));
         self.node_cache.slice().iter().for_each(|&n| {
             let bitfield_index = (n as usize) >> 6;
             let bit_index = n as u32 & 0x0000003F;
@@ -246,30 +240,34 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
     type Item = u16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.search_stack.pop() {
-            Some(i) => {
-                let r = u16::from(i);
-                self.mark_visited(r);
-                match self.graph.node_pointers[r as usize] {
-                    Some(_) => {
-                        let next_edge_slice = self.graph.get_neighbors_out(r);
-                        self.push_slice(next_edge_slice);
-                        Some(r)
-                    }
-                    None => Some(r),
-                }
-            }
-            None => None,
-        }
+        let next_node = self.search_stack.pop().map_or(0, u16::from);
+        self.mark_visited(next_node);
+        let (next_edge_pointers, next_edge_indexes) = self.graph.get_neighbors_out(next_node);
+        self.push_slices(next_edge_pointers, next_edge_indexes);
+
+        NonZeroU16::new(next_node).map(u16::from)
     }
 
-    // A custom .find implementation will maybe beat the default implementation by a little bit.
-    //fn find<P>(&mut self, mut check_found: P) -> Option<Self::Item>
-    //where
-    //    P: FnMut(&Self::Item) -> bool,
-    //{
-    //
-    //}
+    //A custom .find implementation will maybe beat the default implementation by a little bit.
+    fn find<P>(&mut self, mut check_found: P) -> Option<Self::Item>
+    where
+        P: FnMut(&Self::Item) -> bool,
+    {
+        loop {
+            match self.search_stack.pop() {
+                Some(n) => {
+                    let r = u16::from(n);
+                    self.mark_visited(r);
+                    let (next_edge_pointers, next_edge_indexes) = self.graph.get_neighbors_out(r);
+                    self.push_slices(next_edge_pointers, next_edge_indexes);
+                    if check_found(&r) {
+                        break Some(r);
+                    }
+                }
+                None => break None,
+            }
+        }
+    }
 }
 
 /// Our ad-hoc DFS stack. We use a massively oversized stack and keep a None value at the 0th index
@@ -336,14 +334,18 @@ pub struct NodeCache {
     ptr: u16,
 }
 
-impl<'cache> NodeCache {
+impl<'g> NodeCache {
     pub const DEFAULT_CACHE: NodeCache = NodeCache {
         buf: [0; 15],
         ptr: 0,
     };
 
     pub fn push(&mut self, n: u16) {
-        self.buf[self.ptr as usize] = n;
+        // SAFETY: Since this is a toy example we can statically ensure no node has more than 15
+        // neighbors.
+        unsafe {
+            *self.buf.get_unchecked_mut(self.ptr as usize) = n;
+        }
         self.ptr += 1;
     }
 
@@ -353,6 +355,10 @@ impl<'cache> NodeCache {
     }
 
     pub fn slice(&self) -> &'_ [u16] {
-        &self.buf[0..self.ptr as usize]
+        // SAFETY: Since this is a toy example we can statically ensure no node has more than 15
+        // neighbors. In a library we might do something similar; nodes may have a lot of incoming
+        // neighbors (e. g. for flute modeling) but will almost never have that many outgoing. We
+        // should never need more than 64 bytes here.
+        unsafe { &self.buf.get_unchecked(0..self.ptr as usize) }
     }
 }

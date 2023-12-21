@@ -47,6 +47,7 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
         dfs_iter.evaluate_logical_access();
         dfs_iter.search_stack.push(1);
         dfs_iter.mark_seen(1);
+        dfs_iter.mark_visited(1);
 
         dfs_iter
     }
@@ -63,30 +64,26 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
 
     /// Get a slice containing a node's outgoing edges. Returns an empty slice if node has no
     /// outgoing edges.
-    #[inline(never)]
-    pub fn get_neighbors_out(&'graph self, v: u16) -> &'graph [u16] {
-        // This is so ugly but it's branchless. There has to be a better way to coax the compiler
-        // into doing something like this.
-
+    pub fn get_neighbors_out(&'graph self, v: u16) -> (&'graph [u16], (u16, u16)) {
         // This function relies on the following assumptions:
         // 1. That we place a terminating value in self.node_pointers that will give us the
         // length of the last edge sub-slice in .edge_pointers.
         // 2. That no two nodes point to the same edge sub-slice.
-        // 3. That no non-terminal node is followed by 7 terminal node values in .node_pointers.
+        // 3. That every value in self.node_pointers is greater than or equal to every value
+        //    preceding it.
 
-        let maybe_start: u16 = self.node_pointers[v as usize].map_or(0, u16::from);
-        let (end_bytes, _) =
-            unsafe { &self.node_pointers[v.saturating_add(1) as usize..].split_at_unchecked(8) };
-        let (_, slice_u8, _) = unsafe { end_bytes.align_to::<u8>() };
-        //let ptr_128 = unsafe { std::mem::transmute::<&[Option<NonZeroU16>], &[u8]>(end_bytes) };
-        let end_128 = unsafe { u128::from_be_bytes(slice_u8.try_into().unwrap_unchecked()) };
-        let end_index = (end_128.leading_zeros() as u16).saturating_add(1) >> 4;
-        let end = unsafe {
-            u16::from(self.node_pointers[(v + 1 + end_index) as usize].unwrap_unchecked())
-        };
-        let start: u16 = end.saturating_sub(end.saturating_sub(maybe_start));
+        let end = self.node_pointers[v.saturating_add(1) as usize].map_or(0, u16::from);
+        let start = self.node_pointers[v as usize].map_or(0, u16::from);
 
-        &self.edge_pointers[start as usize..end as usize]
+        // SAFETY: We statically ensure the value at any node index in self.node_pointers is
+        // greater than or equal to the values at prior indexes.
+        (
+            unsafe {
+                self.edge_pointers
+                    .get_unchecked(start as usize..end as usize)
+            },
+            (start, end),
+        )
     }
 }
 

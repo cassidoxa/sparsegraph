@@ -260,6 +260,19 @@ fn new_random() -> (
     assert!(!edge_ptr_set.contains(&(NUM_VERTICES as u16 + 1)));
     assert!(!edge_ptr_set.contains(&(0)));
 
+    // Fill node_pointers such that we can always get a node's outgoing edges slice length with
+    // node_pointers[i]..node_pointers[i + 1] and terminal edges still produce an empty slice.
+    for i in 1..NUM_VERTICES + 1 {
+        match node_pointers.get_mut(i).unwrap().0 {
+            Some(_) => (),
+            None => {
+                let rest_slice = &node_pointers[i + 1..];
+                let end = rest_slice.iter().find(|n| n.0.is_some()).unwrap();
+                node_pointers[i] = *end;
+            }
+        };
+    }
+
     // Generate and write fake requirements
     // boots OR hammer
     for _ in 0..3000 {
@@ -299,11 +312,7 @@ impl NumWrapper {
 
 impl std::fmt::Display for NumWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "NonZeroU16::new({})",
-            self.0.map_or(0u16, u16::from)
-        )
+        write!(f, "NonZeroU16::new({})", self.0.map_or(0u16, u16::from))
     }
 }
 
