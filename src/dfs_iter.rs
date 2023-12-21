@@ -195,13 +195,14 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
     /// Pushes the neighbor slice of a node onto our DFS stack. A neighbor is only pushed if it's
     /// accessible and hasn't been seen or visited previously. Before being pushed, a node is
     /// marked as seen.
-    pub fn push_slices(&mut self, edge_pointers: &[u16], edge_indexes: (u16, u16)) {
-        let indexes = (edge_indexes.0..edge_indexes.1).step_by(1);
+    pub fn push_neighbors_out(&mut self, edge_pointers: &[u16], edge_index: u16) {
+        let indexes =
+            (edge_index..edge_index.saturating_add(edge_pointers.len() as u16)).step_by(1);
         // Inlining here to tell the borrow checker we don't need to borrow all of self. This could
         // definitely be improved but :shrug:
-        let accessible = |n: u16| -> bool {
-            let bit_index = n as u32 & 0x0000003F;
-            let bitfield_index = n as usize >> 6;
+        let accessible = |e: u16| -> bool {
+            let bit_index = e as u32 & 0x0000003F;
+            let bitfield_index = e as usize >> 6;
             let bitmask = Self::BITMASK_CUR >> bit_index;
 
             (bitmask & self.edge_access[bitfield_index]) != 0
@@ -242,8 +243,8 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
     fn next(&mut self) -> Option<Self::Item> {
         let next_node = self.search_stack.pop().map_or(0, u16::from);
         self.mark_visited(next_node);
-        let (next_edge_pointers, next_edge_indexes) = self.graph.get_neighbors_out(next_node);
-        self.push_slices(next_edge_pointers, next_edge_indexes);
+        let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(next_node);
+        self.push_neighbors_out(next_edge_pointers, edges_index);
 
         NonZeroU16::new(next_node).map(u16::from)
     }
@@ -258,8 +259,8 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
                 Some(n) => {
                     let r = u16::from(n);
                     self.mark_visited(r);
-                    let (next_edge_pointers, next_edge_indexes) = self.graph.get_neighbors_out(r);
-                    self.push_slices(next_edge_pointers, next_edge_indexes);
+                    let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(r);
+                    self.push_neighbors_out(next_edge_pointers, edges_index);
                     if check_found(&r) {
                         break Some(r);
                     }

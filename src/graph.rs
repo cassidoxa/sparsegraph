@@ -62,9 +62,9 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
         }
     }
 
-    /// Get a slice containing a node's outgoing edges. Returns an empty slice if node has no
-    /// outgoing edges.
-    pub fn get_neighbors_out(&'graph self, v: u16) -> (&'graph [u16], (u16, u16)) {
+    /// Get a slice containing a node's outgoing edges and the index of the first edge.
+    /// Returns an empty slice if node has no outgoing edges.
+    pub fn get_neighbors_out(&'graph self, v: u16) -> (&'graph [u16], u16) {
         // This function relies on the following assumptions:
         // 1. That we place a terminating value in self.node_pointers that will give us the
         // length of the last edge sub-slice in .edge_pointers.
@@ -82,7 +82,7 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
                 self.edge_pointers
                     .get_unchecked(start as usize..end as usize)
             },
-            (start, end),
+            start,
         )
     }
 }
