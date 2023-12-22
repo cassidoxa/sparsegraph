@@ -327,8 +327,10 @@ impl DfsStack {
     }
 }
 
-/// We use another (very ad-hoc) buffer for holding and processing neighbor nodes as they're seen
-/// throughout the search. This whole thing could be improved but this ends up good enough.
+/// We use another (very ad-hoc,) ephemeral buffer for holding and processing neighbor nodes
+/// as they're seen throughout the search. In a libary we might have a more general IndexCache
+/// that can also store edges. Keeping some small (<= a cache line) scratch space lets us speed up
+/// the hot search loops and simplify some of the ownership and borrowing here.
 #[derive(Debug)]
 pub struct NodeCache {
     buf: [u16; 15],

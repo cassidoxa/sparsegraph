@@ -7,11 +7,13 @@ use crate::{
 };
 
 /// Our main graph representation. Primarily represented by an offset array where the value for
-/// vertex Vx at index x is either an index into our outgoing edges array or None if no outgoing
-/// edges. The length of the edge_pointers sub slice containing all of Vx's outgoing edges is this index
-/// subtracted from the next numerical index. The values in the second edge array are indexes
-/// back into the first that point to a connected vertex. Additional arrays are present for
-/// metadata whose values map to identical indexes for each vertex and edge.
+/// vertex Vx at index x is an index into our outgoing edges array. Combined with the value at
+/// V(x+1) we can get a slice &[u16] containing indexes for connected nodes or an empty slice if
+/// the node has no outgoing edges. The length of the edge_pointers sub slice containing all
+/// of Vx's outgoing edges is this index subtracted from the next numerical index. The values in
+/// the second edge array are indexes back into the first that point to a connected vertex.
+/// Additional arrays are present for metadata whose values map to identical indexes for each
+/// vertex and edge.
 ///
 /// We call this a "static" graph because it is a structure-of-arrays where the arrays have a
 /// fixed size. This would be determined and output during compile time when our plain text model
