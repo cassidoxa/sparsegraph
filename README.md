@@ -6,11 +6,15 @@ logic associated with each edge of the graph and performs a depth-first search o
 requires the nightly version of the compiler because it uses some unstable features. You can add
 +nightly to a cargo invocation to use it.
 
-**Test** - `cargo +nightly test`
+We also add `-C target-cpu=native` to our compilation flags in case the compiler incidentally wants
+to use any SIMD instructions beyond SSE2 (which it currently does.) In an actual library we would
+more deliberately target and design around specific features keeping broader compatibility in mind.
 
-**Bench** - `cargo +nightly bench` (Might require gnuplot, probably not a very good bench.)
+**Test** - `RUSTFLAGS="-C target-cpu=native" cargo +nightly test`
 
-**Main** - `cargo +nightly build --release` (Provides a binary that does nothing but search for every node in the graph.)
+**Bench** - `RUSTFLAGS="-C target-cpu=native" cargo +nightly bench` (Might require gnuplot, probably not a very good bench.)
+
+**Main** - `RUSTFLAGS="-C target-cpu=native" cargo +nightly build --release` (Provides a binary that does nothing but search for every node in the graph.)
 
 ## Logic
 

@@ -25,6 +25,7 @@ const EDGES_PER: [u8; 5] = [0, 1, 2, 3, 4];
 const WEIGHTS: [u8; 5] = [4, 26, 67, 31, 3];
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     let path = "src/gen.rs";
     let (node_ptrs, node_data, edge_ptrs, edge_data) = new_random();
     let np_string = format!(
@@ -104,7 +105,7 @@ fn new_random() -> (
             for _ in 0..num_outgoing {
                 'outgoing: loop {
                     let mut dest_min = (src as usize).saturating_sub(15);
-                    let mut dest_max = min(NUM_VERTICES, src.saturating_add(31) as usize);
+                    let mut dest_max = min(NUM_VERTICES, src.saturating_add(15) as usize);
                     let near_prob = rng.gen_range(0..1000);
                     let dest: u16 = 'dest: loop {
                         let x = {
@@ -155,7 +156,7 @@ fn new_random() -> (
     unconnected_set.iter().for_each(|u| 'unconnected: loop {
         let dest = *u;
         let mut src_min = (dest as usize).saturating_sub(15);
-        let mut src_max = min(NUM_VERTICES, dest.saturating_add(31) as usize);
+        let mut src_max = min(NUM_VERTICES, dest.saturating_add(15) as usize);
         let near_prob = rng.gen_range(0..1000);
         let src: u16 = 'src: loop {
             let x = {

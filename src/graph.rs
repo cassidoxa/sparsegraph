@@ -1,8 +1,9 @@
 use std::num::NonZeroU16;
 
 use crate::{
+    bfs_iter::{BfsIter, BfsNodeCache, BfsQueue},
     constants::*,
-    dfs_iter::{DfsIter, DfsStack, NodeCache},
+    dfs_iter::{DfsIter, DfsNodeCache, DfsStack},
     logic::CollectionState,
 };
 
@@ -44,7 +45,7 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
             visited: Box::new([0u64; VISITED_BITFIELD_LEN]),
             seen: Box::new([0u64; VISITED_BITFIELD_LEN]),
             edge_access: Box::new([0u64; ACCESS_BITFIELD_LEN]),
-            node_cache: NodeCache::DEFAULT_CACHE,
+            node_cache: DfsNodeCache::DEFAULT_CACHE,
         };
         dfs_iter.evaluate_logical_access();
         dfs_iter.search_stack.push(1);
@@ -52,6 +53,29 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
         dfs_iter.mark_visited(1);
 
         dfs_iter
+    }
+
+    /// This gives us a data structure implementing Iterator that traverses the graph with a depth-
+    /// first search.
+    pub fn bfs_iter(&'graph self) -> BfsIter<'graph, M, N> {
+        let mut bfs_iter = BfsIter {
+            graph: self,
+            root: 1,
+            search_started: false,
+            search_exhausted: false,
+            search_queue: BfsQueue::new(),
+            collection_state: CollectionState::default(),
+            visited: Box::new([0u64; VISITED_BITFIELD_LEN]),
+            seen: Box::new([0u64; VISITED_BITFIELD_LEN]),
+            edge_access: Box::new([0u64; ACCESS_BITFIELD_LEN]),
+            node_cache: BfsNodeCache::DEFAULT_CACHE,
+        };
+        bfs_iter.evaluate_logical_access();
+        bfs_iter.search_queue.push(1);
+        bfs_iter.mark_seen(1);
+        bfs_iter.mark_visited(1);
+
+        bfs_iter
     }
 
     /// Get a new zeroed graph.
@@ -166,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn test_searches_equal() {
+    fn test_searches_equal_dfs() {
         let graph = new_static_graph();
         let mut dfs_iter_resumable = graph.dfs_iter();
         let mut dfs_iter = graph.dfs_iter();
@@ -180,7 +204,21 @@ mod tests {
     }
 
     #[test]
-    fn test_connected() {
+    fn test_searches_equal_bfs() {
+        let graph = new_static_graph();
+        let mut bfs_iter_resumable = graph.bfs_iter();
+        let mut bfs_iter = graph.bfs_iter();
+        for i in 1..10 as u16 {
+            bfs_iter.search_started = false;
+            bfs_iter.search_exhausted = false;
+            let search_resumable = bfs_iter_resumable.search_resumable(i);
+            let search = bfs_iter.search(i);
+            assert_eq!(search_resumable, search);
+        }
+    }
+
+    #[test]
+    fn test_connected_dfs() {
         let mut graph = new_static_graph_open();
         graph.edge_data = Box::new([0u16; NUM_EDGES_PADDED]); // No logic
         let mut dfs_iter = graph.dfs_iter();
@@ -189,16 +227,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_connected_bfs() {
+        let mut graph = new_static_graph_open();
+        graph.edge_data = Box::new([0u16; NUM_EDGES_PADDED]); // No logic
+        let mut bfs_iter = graph.bfs_iter();
+        for _ in 1..NUM_VERTICES {
+            assert!(bfs_iter.next().is_some());
+        }
+    }
+
     // cargo +nightly test -- --nocapture > output_file
     //#[test]
     //fn manual_test() {
     //    let graph = new_static_graph_open();
-    //    let mut dfs_iter = graph.dfs_iter();
+    //    let mut bfs_iter = graph.bfs_iter();
     //    println!("Manual test:");
     //    println!("n: {:?}", &graph.node_pointers);
     //    println!("e: {:?}\n", &graph.edge_pointers);
     //    for i in 1..=20000 {
-    //        println!("next_node: {:?}", dfs_iter.next());
+    //        println!("next_node: {:?}", bfs_iter.next());
     //    }
     //}
 }

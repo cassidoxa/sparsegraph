@@ -3,20 +3,25 @@ name = "sparsegraph"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 
-
 [dev-dependencies]
-criterion = { version = "0.4", features = ["html_reports"] }
+criterion = "0.4"
 
 [build-dependencies]
 rand = { version = "0.8.4", features = ["rand_chacha", "min_const_gen"] }
 rand_chacha = { version = "0.3.1", features = ["simd"] }
 
 [[bench]]
-name = "dfs_traversal_benchmark"
+name = "dfs"
+harness = false
+
+[[bench]]
+name = "bfs"
+harness = false
+
+[[bench]]
+name = "static_graph"
 harness = false
 
 [profile.dev]

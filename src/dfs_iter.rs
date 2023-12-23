@@ -25,7 +25,7 @@ pub struct DfsIter<'graph, const M: usize, const N: usize> {
     pub visited: Box<[u64; VISITED_BITFIELD_LEN]>,
     pub seen: Box<[u64; VISITED_BITFIELD_LEN]>,
     pub edge_access: Box<[u64; VISITED_BITFIELD_LEN]>, // Just reusing this constant
-    pub node_cache: NodeCache,
+    pub node_cache: DfsNodeCache,
 }
 
 impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
@@ -319,26 +319,22 @@ impl DfsStack {
     }
 
     pub fn clear(&mut self) {
-        self.ptr = 0
-    }
-
-    pub fn reset(&mut self) {
-        self.ptr = 1
+        self.ptr = 0;
     }
 }
 
-/// We use another (very ad-hoc,) ephemeral buffer for holding and processing neighbor nodes
-/// as they're seen throughout the search. In a libary we might have a more general IndexCache
-/// that can also store edges. Keeping some small (<= a cache line) scratch space lets us speed up
-/// the hot search loops and simplify some of the ownership and borrowing here.
+/// We use a (very ad-hoc,) ephemeral buffer for holding and processing neighbor nodes as they're
+/// seen throughout the search. In a libary we might have a more general IndexCache that can also
+/// store edges. Keeping some small (<= a cache line) scratch space lets us speed up the hot
+/// search loops and simplify some of the ownership and borrowing here.
 #[derive(Debug)]
-pub struct NodeCache {
+pub struct DfsNodeCache {
     buf: [u16; 15],
     ptr: u16,
 }
 
-impl<'g> NodeCache {
-    pub const DEFAULT_CACHE: NodeCache = NodeCache {
+impl<'g> DfsNodeCache {
+    pub const DEFAULT_CACHE: DfsNodeCache = DfsNodeCache {
         buf: [0; 15],
         ptr: 0,
     };
@@ -357,11 +353,16 @@ impl<'g> NodeCache {
         self.ptr = 0;
     }
 
-    pub fn slice(&self) -> &'_ [u16] {
+    pub fn slice(&mut self) -> &'_ [u16] {
         // SAFETY: Since this is a toy example we can statically ensure no node has more than 15
         // neighbors. In a library we might do something similar; nodes may have a lot of incoming
         // neighbors (e. g. for flute modeling) but will almost never have that many outgoing. We
         // should never need more than 64 bytes here.
+
+        unsafe {
+            self.buf.get_unchecked_mut(0..self.ptr as usize).reverse();
+        }
+
         unsafe { &self.buf.get_unchecked(0..self.ptr as usize) }
     }
 }
