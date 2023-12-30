@@ -9,8 +9,12 @@ pub const NUM_EDGES: usize = (NUM_VERTICES * 2) + (NUM_VERTICES >> 2) + 500;
 
 //pub const NUM_VERTICES_PADDED: usize = NUM_VERTICES + (CHUNK_SIZE - (NUM_VERTICES % CHUNK_SIZE));
 //pub const NUM_EDGES_PADDED: usize = NUM_EDGES + (CHUNK_SIZE - (NUM_EDGES % CHUNK_SIZE));
-pub const NUM_VERTICES_PADDED: usize = u16::MAX as usize + 1; // Eh, why not
-pub const NUM_EDGES_PADDED: usize = u16::MAX as usize + 1; //
+
+// In a library we can use named enum variants for every node and edge derived from our plain text
+// world model. This will allow us to safely elide bounds checks when indexing. But for now we can
+// index with u16s and put the padded length out of range to achieve the same thing.
+pub const NUM_VERTICES_PADDED: usize = u16::MAX as usize + 1;
+pub const NUM_EDGES_PADDED: usize = u16::MAX as usize + 1;
 
 // These could be const generics on GraphWalkerDfs which could trade uglier library code for a
 // nicer public interface but the compiler feature is unstable.

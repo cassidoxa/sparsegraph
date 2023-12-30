@@ -22,7 +22,6 @@ pub struct BfsIter<'graph, const M: usize, const N: usize> {
     pub visited: Box<[u64; VISITED_BITFIELD_LEN]>,
     pub seen: Box<[u64; VISITED_BITFIELD_LEN]>,
     pub edge_access: Box<[u64; VISITED_BITFIELD_LEN]>, // Just reusing this constant
-    pub node_cache: BfsNodeCache,
 }
 
 impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
@@ -195,39 +194,14 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
     pub fn push_neighbors_out(&mut self, edge_pointers: &[u16], edge_index: u16) {
         let indexes =
             (edge_index..edge_index.saturating_add(edge_pointers.len() as u16)).step_by(1);
-        // Inlining here to tell the borrow checker we don't need to borrow all of self. This could
-        // definitely be improved but :shrug:
-        let accessible = |e: u16| -> bool {
-            let bit_index = e as u32 & 0x0000003F;
-            let bitfield_index = e as usize >> 6;
-            let bitmask = Self::BITMASK_CUR >> bit_index;
-
-            (bitmask & self.edge_access[bitfield_index]) != 0
-        };
-
-        let seen = |n: u16| -> bool {
-            let bit_index = n as u32 & 0x0000003F;
-            let bitfield_index = n as usize >> 6;
-            let bitmask = Self::BITMASK_CUR >> bit_index;
-
-            (self.seen[bitfield_index] & bitmask) != 0
-        };
-
-        edge_pointers
-            .iter()
-            .zip(indexes)
-            .filter(|(&n, d)| accessible(*d) && !seen(n))
-            .for_each(|(&n, _)| self.node_cache.push(n));
-        self.node_cache.slice().iter().for_each(|&n| {
-            let bitfield_index = (n as usize) >> 6;
-            let bit_index = n as u32 & 0x0000003F;
-            let bitmask = Self::BITMASK_CUR >> bit_index;
-            self.seen[bitfield_index] |= bitmask;
-            self.search_queue.push(n);
+        // I feel this could be improved somehow without using an intermediate container but using
+        // .filter leads to borrowing problems and this seems fast enough.
+        edge_pointers.iter().zip(indexes).for_each(|(&n, d)| {
+            if self.check_access(d) && !self.check_seen(n) {
+                self.mark_seen(n);
+                self.search_queue.push(n);
+            }
         });
-
-        // We have to clear our little node cache for next time
-        self.node_cache.clear();
     }
 }
 
@@ -322,41 +296,5 @@ impl BfsQueue {
     pub fn clear(&mut self) {
         self.front_ptr = 0;
         self.back_ptr = 0;
-    }
-}
-
-#[derive(Debug)]
-pub struct BfsNodeCache {
-    buf: [u16; 15],
-    ptr: u16,
-}
-
-impl<'g> BfsNodeCache {
-    pub const DEFAULT_CACHE: BfsNodeCache = BfsNodeCache {
-        buf: [0; 15],
-        ptr: 0,
-    };
-
-    pub fn push(&mut self, n: u16) {
-        // SAFETY: Since this is a toy example we can statically ensure no node has more than 15
-        // neighbors.
-        unsafe {
-            *self.buf.get_unchecked_mut(self.ptr as usize) = n;
-        }
-        self.ptr += 1;
-    }
-
-    pub fn clear(&mut self) {
-        self.buf = [0; 15];
-        self.ptr = 0;
-    }
-
-    pub fn slice(&mut self) -> &'_ [u16] {
-        // SAFETY: Since this is a toy example we can statically ensure no node has more than 15
-        // neighbors. In a library we might do something similar; nodes may have a lot of incoming
-        // neighbors (e. g. for flute modeling) but will almost never have that many outgoing. We
-        // should never need more than 64 bytes here.
-
-        unsafe { &self.buf.get_unchecked(0..self.ptr as usize) }
     }
 }

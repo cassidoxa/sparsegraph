@@ -17,12 +17,12 @@ const IMPORTS: &str = r#"use std::num::NonZeroU16;
 use crate::{graph::{NodeData, NodeType}, constants::{NUM_VERTICES_PADDED, NUM_EDGES_PADDED}};"#;
 // const TYPE_PREFIX: &'static str = r#"pub static STATIC_GRAPH: StaticGraph<NUM_VERTICES_PADDED, NUM_EDGES_PADDED> = StaticGraph {"#;
 
-// The distribution should produce between ~40k-43k edges. The rest will be used to randomly
-// connect any remaining unconnected nodes and then randomly placed to fill out NUM_EDGES.
-// We use a seeded RNG to get more consistent results across the board. There is an unseeded RNG
-// commented out just below it.
+// The distribution should produce ~38k edges. The rest will be used to randomly connect any
+// remaining unconnected nodes and then randomly placed to fill out NUM_EDGES. We use a seeded
+// RNG to get more consistent results across the board. There is an unseeded RNG commented out
+// just below it.
 const EDGES_PER: [u8; 5] = [0, 1, 2, 3, 4];
-const WEIGHTS: [u8; 5] = [4, 26, 67, 31, 3];
+const WEIGHTS: [u8; 5] = [3, 10, 50, 31, 6];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -69,15 +69,18 @@ fn new_random() -> (
     // We don't want any edge duplicates
     let mut connections: HashSet<(u16, u16)> = HashSet::with_capacity(NUM_EDGES);
     let mut rng = ChaCha20Rng::seed_from_u64(0x4FA7905BF65E7E9D);
-    // let mut rng = ChaCha20Rng::from_entropy();
+    //let mut rng = ChaCha20Rng::from_entropy();
+
     let mut frontier_queue: VecDeque<HashSet<u16>> = VecDeque::new();
     let mut visited = [false; NUM_VERTICES];
     let node_set: HashSet<u16> = (1..=NUM_VERTICES as u16).step_by(1).collect();
 
     // The zeroth node is our default root. Randomly choose a number of outgoing edges from 1-4,
     // push our first frontier onto the queue, then loop for the rest
+
     let mut root_frontier: HashSet<u16> = HashSet::new();
-    let root_edge_count = rng.gen_range(1..4);
+    let root_edge_count = 3;
+    //let root_edge_count = rng.gen_range(1..4);
     for _ in 0..root_edge_count {
         'root_frontier: loop {
             let dest: u16 = rng.gen_range(2..17);
@@ -91,6 +94,7 @@ fn new_random() -> (
             };
         }
     }
+    visited[1] = true;
     frontier_queue.push_back(root_frontier);
 
     'fill: loop {
@@ -102,61 +106,59 @@ fn new_random() -> (
         frontier.iter().for_each(|n| {
             let src = *n;
             let num_outgoing = EDGES_PER[dist.sample(&mut rng)];
-            for _ in 0..num_outgoing {
-                'outgoing: loop {
-                    let mut dest_min = (src as usize).saturating_sub(15);
-                    let mut dest_max = min(NUM_VERTICES, src.saturating_add(15) as usize);
+            (0..num_outgoing).for_each(|_| 'outgoing: loop {
+                let mut dest_min = (src as usize).saturating_sub(16);
+                let mut dest_max = min(NUM_VERTICES, src.saturating_add(24) as usize);
+                let dest: u16 = 'dest: loop {
                     let near_prob = rng.gen_range(0..1000);
-                    let dest: u16 = 'dest: loop {
-                        let x = {
-                            if near_prob >= 990 {
-                                dest_min = dest_min.saturating_sub(128);
-                                dest_max = min(NUM_VERTICES, dest_max + 256);
-                            } else if near_prob >= 940 {
-                                dest_min = dest_min.saturating_sub(32);
-                                dest_max = min(NUM_VERTICES, dest_max + 64);
-                            }
-                            rng.gen_range(dest_min..dest_max)
-                        };
-                        if (x as u16 != src) && (x != 0) {
-                            break 'dest x as u16;
+                    let x = {
+                        if near_prob >= 990 {
+                            dest_min = dest_min.saturating_sub(128);
+                            dest_max = min(NUM_VERTICES, dest_max + 256);
+                        } else if near_prob >= 940 {
+                            dest_min = dest_min.saturating_sub(32);
+                            dest_max = min(NUM_VERTICES, dest_max + 64);
                         }
+                        rng.gen_range(dest_min..dest_max)
                     };
-                    match connections.contains(&(src, dest)) {
-                        false => {
-                            if connections.len() == NUM_EDGES {
-                                fill_done = true;
-                            }
-                            if !fill_done {
-                                connections.insert((src, dest));
-                            }
-                            if !visited[dest as usize] && !fill_done {
-                                new_frontier.insert(dest);
-                            }
-                            break 'outgoing;
+                    if (x != 0) && (x as u16 != src) {
+                        break 'dest x as u16;
+                    }
+                };
+                match connections.contains(&(src, dest)) {
+                    true => continue 'outgoing,
+                    false => {
+                        if !fill_done {
+                            connections.insert((src, dest));
                         }
-                        true => continue 'outgoing,
+                        if !visited[dest as usize] && !fill_done {
+                            visited[dest as usize] = true;
+                            new_frontier.insert(dest);
+                        }
+                        if connections.len() == NUM_EDGES {
+                            fill_done = true;
+                        }
                     }
                 }
-            }
-            visited[src as usize] = true;
+                break 'outgoing;
+            });
         });
         if fill_done {
             break 'fill;
         }
         if !new_frontier.is_empty() {
-            frontier_queue.push_back(new_frontier);
+            frontier_queue.push_back(new_frontier.clone());
         }
     }
-    // We should have 3000 or so unplaced edges.
+
     // Get the set of all nodes with no outgoing edges and connect them to an already connected
     // node.
     let connected_set: HashSet<u16> = connections.iter().map(|&x| x.1).collect();
     let unconnected_set: HashSet<u16> = node_set.difference(&connected_set).copied().collect();
     unconnected_set.iter().for_each(|u| 'unconnected: loop {
         let dest = *u;
-        let mut src_min = (dest as usize).saturating_sub(15);
-        let mut src_max = min(NUM_VERTICES, dest.saturating_add(15) as usize);
+        let mut src_min = (dest as usize).saturating_sub(16);
+        let mut src_max = min(NUM_VERTICES, dest.saturating_add(24) as usize);
         let near_prob = rng.gen_range(0..1000);
         let src: u16 = 'src: loop {
             let x = {

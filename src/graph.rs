@@ -1,7 +1,7 @@
 use std::num::NonZeroU16;
 
 use crate::{
-    bfs_iter::{BfsIter, BfsNodeCache, BfsQueue},
+    bfs_iter::{BfsIter, BfsQueue},
     constants::*,
     dfs_iter::{DfsIter, DfsNodeCache, DfsStack},
     logic::CollectionState,
@@ -68,7 +68,6 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
             visited: Box::new([0u64; VISITED_BITFIELD_LEN]),
             seen: Box::new([0u64; VISITED_BITFIELD_LEN]),
             edge_access: Box::new([0u64; ACCESS_BITFIELD_LEN]),
-            node_cache: BfsNodeCache::DEFAULT_CACHE,
         };
         bfs_iter.evaluate_logical_access();
         bfs_iter.search_queue.push(1);
