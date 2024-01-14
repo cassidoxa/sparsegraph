@@ -3,7 +3,7 @@ use std::num::NonZeroU16;
 use crate::{
     bfs_iter::{BfsIter, BfsQueue},
     constants::*,
-    dfs_iter::{DfsIter, DfsNodeCache, DfsStack},
+    dfs_iter::{DfsIter, DfsStack},
     logic::CollectionState,
 };
 
@@ -23,7 +23,6 @@ use crate::{
 /// by hopefully fitting as much as possible into cache lines and possibly being able to elide
 /// most bounds checks where we might be doing hundreds of thousands of array accesses or more.
 /// Despite being "static" in size, this graph representation allows
-#[derive(Debug)]
 pub struct StaticGraph<const M: usize, const N: usize> {
     pub node_pointers: Box<[Option<NonZeroU16>; M]>,
     pub node_data: Box<[NodeData; M]>,
@@ -38,19 +37,14 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
         let mut dfs_iter = DfsIter {
             graph: self,
             root: 1,
-            search_started: false,
-            search_exhausted: false,
             search_stack: DfsStack::new(),
             collection_state: CollectionState::default(),
             visited: Box::new([0u64; VISITED_BITFIELD_LEN]),
-            seen: Box::new([0u64; VISITED_BITFIELD_LEN]),
             edge_access: Box::new([0u64; ACCESS_BITFIELD_LEN]),
-            node_cache: DfsNodeCache::DEFAULT_CACHE,
         };
         dfs_iter.evaluate_logical_access();
-        dfs_iter.search_stack.push(1);
-        dfs_iter.mark_seen(1);
-        dfs_iter.mark_visited(1);
+        dfs_iter.search_stack.push(dfs_iter.root);
+        dfs_iter.mark_visited(dfs_iter.root);
 
         dfs_iter
     }
@@ -61,18 +55,14 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
         let mut bfs_iter = BfsIter {
             graph: self,
             root: 1,
-            search_started: false,
-            search_exhausted: false,
             search_queue: BfsQueue::new(),
             collection_state: CollectionState::default(),
             visited: Box::new([0u64; VISITED_BITFIELD_LEN]),
-            seen: Box::new([0u64; VISITED_BITFIELD_LEN]),
             edge_access: Box::new([0u64; ACCESS_BITFIELD_LEN]),
         };
         bfs_iter.evaluate_logical_access();
-        bfs_iter.search_queue.push(1);
-        bfs_iter.mark_seen(1);
-        bfs_iter.mark_visited(1);
+        bfs_iter.search_queue.push_back(bfs_iter.root);
+        bfs_iter.mark_visited(bfs_iter.root);
 
         bfs_iter
     }
@@ -143,7 +133,6 @@ pub fn new_static_graph_open() -> StaticGraph<NUM_VERTICES_PADDED, NUM_EDGES_PAD
 ///
 /// We store these in an array separate from node pointers for the sake of cache efficiency; a
 /// traversing iterator can choose whether it cares about them or not.
-#[derive(Debug)]
 pub struct NodeData {
     pub node_type: NodeType,
     pub data_index: u16,
@@ -164,7 +153,6 @@ impl NodeData {
     pub const DEFAULT: NodeData = NodeData::default();
 }
 
-#[derive(Debug)]
 pub enum NodeType {
     Place, // ie: "Region" in ER, a logically distinct place where the player can just "be."
     Item,
@@ -189,41 +177,14 @@ mod tests {
     }
 
     #[test]
-    fn test_searches_equal_dfs() {
-        let graph = new_static_graph();
-        let mut dfs_iter_resumable = graph.dfs_iter();
-        let mut dfs_iter = graph.dfs_iter();
-        for i in 1..10 as u16 {
-            dfs_iter.search_started = false;
-            dfs_iter.search_exhausted = false;
-            let search_resumable = dfs_iter_resumable.search_resumable(i);
-            let search = dfs_iter.search(i);
-            assert_eq!(search_resumable, search);
-        }
-    }
-
-    #[test]
-    fn test_searches_equal_bfs() {
-        let graph = new_static_graph();
-        let mut bfs_iter_resumable = graph.bfs_iter();
-        let mut bfs_iter = graph.bfs_iter();
-        for i in 1..10 as u16 {
-            bfs_iter.search_started = false;
-            bfs_iter.search_exhausted = false;
-            let search_resumable = bfs_iter_resumable.search_resumable(i);
-            let search = bfs_iter.search(i);
-            assert_eq!(search_resumable, search);
-        }
-    }
-
-    #[test]
     fn test_connected_dfs() {
         let mut graph = new_static_graph_open();
         graph.edge_data = Box::new([0u16; NUM_EDGES_PADDED]); // No logic
         let mut dfs_iter = graph.dfs_iter();
-        for _ in 1..NUM_VERTICES {
+        for _ in 1..=NUM_VERTICES {
             assert!(dfs_iter.next().is_some());
         }
+        assert_eq!(None, dfs_iter.next());
     }
 
     #[test]
@@ -231,20 +192,21 @@ mod tests {
         let mut graph = new_static_graph_open();
         graph.edge_data = Box::new([0u16; NUM_EDGES_PADDED]); // No logic
         let mut bfs_iter = graph.bfs_iter();
-        for _ in 1..NUM_VERTICES {
+        for _ in 1..=NUM_VERTICES {
             assert!(bfs_iter.next().is_some());
         }
+        assert_eq!(None, bfs_iter.next());
     }
 
     // cargo +nightly test -- --nocapture > output_file
     //#[test]
     //fn manual_test() {
     //    let graph = new_static_graph_open();
-    //    let mut bfs_iter = graph.bfs_iter();
+    //    let mut dfs_iter = graph.bfs_iter();
     //    println!("Manual test:");
     //    println!("n: {:?}", &graph.node_pointers);
     //    println!("e: {:?}\n", &graph.edge_pointers);
-    //    for i in 1..=20000 {
+    //    for _ in 1..=20005 as u16 {
     //        println!("next_node: {:?}", bfs_iter.next());
     //    }
     //}

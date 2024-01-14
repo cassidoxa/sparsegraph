@@ -14,18 +14,13 @@ use crate::{
 /// for item location access checking with depth first search e.g. one where the .next() method
 /// ignores logical constraints for checking node connectedness or a breadth first search for
 /// narrower searches where the target is probably closer to the root.
-#[derive(Debug)]
 pub struct DfsIter<'graph, const M: usize, const N: usize> {
     pub graph: &'graph StaticGraph<M, N>,
     pub root: u16,
-    pub search_started: bool,
-    pub search_exhausted: bool,
     pub search_stack: DfsStack,
     pub collection_state: CollectionState,
     pub visited: Box<[u64; VISITED_BITFIELD_LEN]>,
-    pub seen: Box<[u64; VISITED_BITFIELD_LEN]>,
-    pub edge_access: Box<[u64; VISITED_BITFIELD_LEN]>, // Just reusing this constant
-    pub node_cache: DfsNodeCache,
+    pub edge_access: Box<[u64; ACCESS_BITFIELD_LEN]>,
 }
 
 impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
@@ -110,8 +105,7 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
     }
 
     /// We have a series of helper methods for checking and setting our bitfields that signify
-    /// whether and edge has been visited, seen, or can be traversed based on any logical
-    /// constraints.
+    /// whether and edge has been visited or can be traversed based on any logical constraints.
     pub fn check_access(&self, idx: u16) -> bool {
         // https://godbolt.org/z/YjjWqrvv1
         let bit_index = idx as u32 & 0x0000003F;
@@ -138,71 +132,22 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
         self.visited[bitfield_index] |= bitmask;
     }
 
-    pub fn check_seen(&self, idx: u16) -> bool {
-        let bit_index = idx as u32 & 0x0000003F;
-        let bitfield_index = idx as usize >> 6;
-        let bitmask = Self::BITMASK_CUR >> bit_index;
-
-        (self.seen[bitfield_index] & bitmask) != 0
-    }
-
-    pub fn mark_seen(&mut self, idx: u16) {
-        let bitfield_index = (idx as usize) >> 6;
-        let bit_index = idx as u32 & 0x0000003F;
-        let bitmask = Self::BITMASK_CUR >> bit_index;
-
-        self.seen[bitfield_index] |= bitmask;
-    }
-
-    /// Resets all visited state and returns whether a node is reachable or not.
-    pub fn search(&mut self, node: u16) -> bool {
-        self.search_started = true;
-        *self.visited = [0u64; VISITED_BITFIELD_LEN];
-        *self.seen = [0u64; VISITED_BITFIELD_LEN];
-        self.search_stack.clear();
-        self.search_stack.push(self.root);
-        self.mark_seen(self.root);
-        self.find(|n| n == &node).is_some()
-    }
-
     /// Returns whether a node is reachable or not, checking previous traversals first.
-    pub fn search_resumable(&mut self, node: u16) -> bool {
-        if !self.search_started {
-            *self.visited = [0u64; VISITED_BITFIELD_LEN];
-            *self.seen = [0u64; VISITED_BITFIELD_LEN];
-            self.search_stack.clear();
-            self.search_stack.push(self.root);
-            self.mark_seen(self.root);
-            self.search_started = true;
-        }
-        let visited = self.check_visited(node);
-        if self.search_exhausted {
-            return visited;
-        }
-        match visited {
-            true => return true,
-            false => (),
-        };
-        match self.find(|n| n == &node) {
-            Some(_) => true,
-            None => {
-                self.search_exhausted = true;
-                false
-            }
+    pub fn search(&mut self, node: u16) -> bool {
+        match self.check_visited(node) {
+            true => true,
+            false => self.any(|n| n == node),
         }
     }
 
-    /// Pushes the neighbor slice of a node onto our DFS stack. A neighbor is only pushed if it's
-    /// accessible and hasn't been seen or visited previously. Before being pushed, a node is
-    /// marked as seen.
-    pub fn push_neighbors_out(&mut self, edge_pointers: &[u16], edge_index: u16) {
+    /// Takes a neighbor slice, visits accessible, unvisited neighbors, and pushes them onto the
+    /// DFS stack.
+    pub fn visit_neighbors_out(&mut self, edge_pointers: &[u16], edge_index: u16) {
         let indexes =
             (edge_index..edge_index.saturating_add(edge_pointers.len() as u16)).step_by(1);
-        // I feel this could be improved somehow without using an intermediate container but using
-        // .filter leads to borrowing problems and this seems fast enough.
         edge_pointers.iter().zip(indexes).for_each(|(&n, d)| {
-            if self.check_access(d) && !self.check_seen(n) {
-                self.mark_seen(n);
+            if self.check_access(d) && !self.check_visited(n) {
+                self.mark_visited(n);
                 self.search_stack.push(n);
             }
         });
@@ -217,41 +162,42 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next_node = self.search_stack.pop().map_or(0, u16::from);
-        self.mark_visited(next_node);
         let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(next_node);
-        self.push_neighbors_out(next_edge_pointers, edges_index);
+        let _ = self.visit_neighbors_out(next_edge_pointers, edges_index);
 
         NonZeroU16::new(next_node).map(u16::from)
     }
 
-    //A custom .find implementation will maybe beat the default implementation by a little bit.
-    fn find<P>(&mut self, mut check_found: P) -> Option<Self::Item>
-    where
-        P: FnMut(&Self::Item) -> bool,
-    {
-        loop {
-            match self.search_stack.pop() {
-                Some(n) => {
-                    let r = u16::from(n);
-                    self.mark_visited(r);
-                    let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(r);
-                    self.push_neighbors_out(next_edge_pointers, edges_index);
-                    if check_found(&r) {
-                        break Some(r);
-                    }
-                }
-                None => break None,
-            }
-        }
-    }
+    // Default .any seems faster
+    //fn any<P>(&mut self, mut check_found: P) -> bool
+    //where
+    //    P: FnMut(Self::Item) -> bool,
+    //{
+    //    loop {
+    //        match self.search_stack.pop() {
+    //            Some(n) => {
+    //                let r = u16::from(n);
+    //                let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(r);
+    //                let neighbor_slice = self.visit_neighbors_out(next_edge_pointers, edges_index);
+    //                match neighbor_slice
+    //                    .iter()
+    //                    .any(|&v| check_found(v.map_or(0, u16::from)))
+    //                {
+    //                    true => break true,
+    //                    false => continue,
+    //                };
+    //            }
+    //            None => break false,
+    //        }
+    //    }
+    //}
 }
 
-/// Our ad-hoc DFS stack. We use a massively oversized stack and keep a None value at the 0th index
-/// to get some small optimizations. I haven't measured but this definitely beats a vector.
-#[derive(Debug)]
+/// A branchless DFS stack. We use a massively oversized stack and keep a None value at the 0th
+/// index to get some optimizations here
 pub struct DfsStack {
     buf: Box<[Option<NonZeroU16>; SEARCH_STACK_SIZE]>,
-    ptr: u16,
+    ptr: usize,
 }
 
 impl Default for DfsStack {
@@ -269,75 +215,21 @@ impl DfsStack {
     }
 
     pub fn push(&mut self, n: u16) {
-        self.ptr = self.ptr.saturating_add(1);
+        debug_assert!(self.ptr < (SEARCH_STACK_SIZE - 1));
+        self.ptr = self.ptr.saturating_add(1) & (SEARCH_STACK_SIZE - 1);
         // SAFETY: We statically ensure every node index that would get pushed on here is > 0
-        self.buf[self.ptr as usize] = Some(unsafe { NonZeroU16::new_unchecked(n) });
-    }
-
-    pub fn push_slice(&mut self, s: &[u16]) {
-        s.iter().for_each(|&n| {
-            self.ptr = self.ptr.saturating_add(1);
-            // SAFETY: We statically ensure every node index that would get pushed on here is > 0
-            self.buf[self.ptr as usize] = Some(unsafe { NonZeroU16::new_unchecked(n) });
-        });
+        self.buf[self.ptr] = Some(unsafe { NonZeroU16::new_unchecked(n) });
     }
 
     pub fn pop(&mut self) -> Option<NonZeroU16> {
-        let s = self.buf[self.ptr as usize];
+        self.ptr = self.ptr & (SEARCH_STACK_SIZE - 1);
+        let s = self.buf[self.ptr];
         self.ptr = self.ptr.saturating_sub(1);
 
         s
     }
 
-    pub const fn last(&self) -> Option<NonZeroU16> {
-        self.buf[self.ptr as usize]
-    }
-
     pub fn clear(&mut self) {
         self.ptr = 0;
-    }
-}
-
-/// We use a (very ad-hoc,) ephemeral buffer for holding and processing neighbor nodes as they're
-/// seen throughout the search. In a libary we might have a more general IndexCache that can also
-/// store edges. Keeping some small (<= a cache line) scratch space lets us speed up the hot
-/// search loops and simplify some of the ownership and borrowing here.
-#[derive(Debug)]
-pub struct DfsNodeCache {
-    buf: [u16; 15],
-    ptr: u16,
-}
-
-impl<'g> DfsNodeCache {
-    pub const DEFAULT_CACHE: DfsNodeCache = DfsNodeCache {
-        buf: [0; 15],
-        ptr: 0,
-    };
-
-    pub fn push(&mut self, n: u16) {
-        // SAFETY: Since this is a toy example we can statically ensure no node has more than 15
-        // neighbors.
-        unsafe {
-            *self.buf.get_unchecked_mut(self.ptr as usize) = n;
-        }
-        self.ptr += 1;
-    }
-
-    pub fn clear(&mut self) {
-        self.buf = [0; 15];
-        self.ptr = 0;
-    }
-
-    pub fn slice(&mut self) -> &'_ [u16] {
-        // SAFETY: Since this is a toy example we can statically ensure no node has more than 15
-        // neighbors. In a library we might do something similar; nodes may have a lot of incoming
-        // neighbors (e. g. for flute modeling) but will almost never have that many outgoing. We
-        // should never need more than 64 bytes here.
-
-        unsafe {
-            self.buf.get_unchecked_mut(0..self.ptr as usize).reverse();
-        }
-
-        unsafe { &self.buf.get_unchecked(0..self.ptr as usize) }
     }
 }

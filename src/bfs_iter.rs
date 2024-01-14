@@ -11,17 +11,13 @@ use crate::{
 /// Our main traversal data structure for simulating access checking. We model a search
 /// with the Iterator trait where the `.next()` method returns the next node in the search or None
 /// if the search has been exhausted.
-#[derive(Debug)]
 pub struct BfsIter<'graph, const M: usize, const N: usize> {
     pub graph: &'graph StaticGraph<M, N>,
     pub root: u16,
-    pub search_started: bool,
-    pub search_exhausted: bool,
     pub search_queue: BfsQueue,
     pub collection_state: CollectionState,
     pub visited: Box<[u64; VISITED_BITFIELD_LEN]>,
-    pub seen: Box<[u64; VISITED_BITFIELD_LEN]>,
-    pub edge_access: Box<[u64; VISITED_BITFIELD_LEN]>, // Just reusing this constant
+    pub edge_access: Box<[u64; ACCESS_BITFIELD_LEN]>,
 }
 
 impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
@@ -106,8 +102,7 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
     }
 
     /// We have a series of helper methods for checking and setting our bitfields that signify
-    /// whether and edge has been visited, seen, or can be traversed based on any logical
-    /// constraints.
+    /// whether and edge has been visited or can be traversed based on any logical constraints.
     pub fn check_access(&self, idx: u16) -> bool {
         // https://godbolt.org/z/YjjWqrvv1
         let bit_index = idx as u32 & 0x0000003F;
@@ -134,72 +129,31 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
         self.visited[bitfield_index] |= bitmask;
     }
 
-    pub fn check_seen(&self, idx: u16) -> bool {
-        let bit_index = idx as u32 & 0x0000003F;
-        let bitfield_index = idx as usize >> 6;
-        let bitmask = Self::BITMASK_CUR >> bit_index;
-
-        (self.seen[bitfield_index] & bitmask) != 0
-    }
-
-    pub fn mark_seen(&mut self, idx: u16) {
-        let bitfield_index = (idx as usize) >> 6;
-        let bit_index = idx as u32 & 0x0000003F;
-        let bitmask = Self::BITMASK_CUR >> bit_index;
-
-        self.seen[bitfield_index] |= bitmask;
-    }
-
-    /// Resets all visited state and returns whether a node is reachable or not.
-    pub fn search(&mut self, node: u16) -> bool {
-        self.search_started = true;
-        *self.visited = [0u64; VISITED_BITFIELD_LEN];
-        *self.seen = [0u64; VISITED_BITFIELD_LEN];
-        self.search_queue.clear();
-        self.search_queue.push(self.root);
-        self.mark_seen(self.root);
-        self.find(|n| n == &node).is_some()
-    }
-
     /// Returns whether a node is reachable or not, checking previous traversals first.
-    pub fn search_resumable(&mut self, node: u16) -> bool {
-        if !self.search_started {
-            *self.visited = [0u64; VISITED_BITFIELD_LEN];
-            *self.seen = [0u64; VISITED_BITFIELD_LEN];
-            self.search_queue.clear();
-            self.search_queue.push(self.root);
-            self.mark_seen(self.root);
-            self.search_started = true;
-        }
-        let visited = self.check_visited(node);
-        if self.search_exhausted {
-            return visited;
-        }
-        match visited {
-            true => return true,
-            false => (),
-        };
-        match self.find(|n| n == &node) {
-            Some(_) => true,
-            None => {
-                self.search_exhausted = true;
-                false
-            }
+    pub fn search(&mut self, node: u16) -> bool {
+        match self.check_visited(node) {
+            true => true,
+            false => self.any(|n| n == node),
         }
     }
 
-    /// Pushes the neighbor slice of a node onto our DFS stack. A neighbor is only pushed if it's
-    /// accessible and hasn't been seen or visited previously. Before being pushed, a node is
-    /// marked as seen.
-    pub fn push_neighbors_out(&mut self, edge_pointers: &[u16], edge_index: u16) {
+    pub fn clear(&mut self) {
+        *self.visited = [0u64; VISITED_BITFIELD_LEN];
+        self.search_queue.clear();
+        self.search_queue.push_back(self.root);
+        self.mark_visited(self.root);
+    }
+
+    /// Takes a neighbor slice, visits accessible, unvisited neighbors, and pushes them onto the
+    /// BFS queue.
+    pub fn visit_neighbors_out(&mut self, edge_pointers: &[u16], edge_index: u16) {
         let indexes =
             (edge_index..edge_index.saturating_add(edge_pointers.len() as u16)).step_by(1);
-        // I feel this could be improved somehow without using an intermediate container but using
-        // .filter leads to borrowing problems and this seems fast enough.
         edge_pointers.iter().zip(indexes).for_each(|(&n, d)| {
-            if self.check_access(d) && !self.check_seen(n) {
-                self.mark_seen(n);
-                self.search_queue.push(n);
+            if self.check_access(d) && !self.check_visited(n) {
+                // SAFETY: Every edge pointer is statically guaranteed greater than 0.
+                self.mark_visited(n);
+                self.search_queue.push_back(n);
             }
         });
     }
@@ -212,43 +166,42 @@ impl<const M: usize, const N: usize> Iterator for BfsIter<'_, M, N> {
     type Item = u16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next_node = self.search_queue.pop().map_or(0, u16::from);
-        self.mark_visited(next_node);
+        let next_node = self.search_queue.pop_front().map_or(0, u16::from);
         let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(next_node);
-        self.push_neighbors_out(next_edge_pointers, edges_index);
+        let _ = self.visit_neighbors_out(next_edge_pointers, edges_index);
 
         NonZeroU16::new(next_node).map(u16::from)
     }
 
-    //A custom .find implementation will maybe beat the default implementation by a little bit.
-    fn find<P>(&mut self, mut check_found: P) -> Option<Self::Item>
-    where
-        P: FnMut(&Self::Item) -> bool,
-    {
-        loop {
-            match self.search_queue.pop() {
-                Some(n) => {
-                    let r = u16::from(n);
-                    self.mark_visited(r);
-                    let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(r);
-                    self.push_neighbors_out(next_edge_pointers, edges_index);
-                    if check_found(&r) {
-                        break Some(r);
-                    }
-                }
-                None => break None,
-            }
-        }
-    }
+    // Default .any seems faster
+    //fn any<P>(&mut self, mut check_found: P) -> bool
+    //where
+    //    P: FnMut(Self::Item) -> bool,
+    //{
+    //    loop {
+    //        match self.search_queue.pop() {
+    //            Some(n) => {
+    //                let r = u16::from(n);
+    //                let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(r);
+    //                let neighbor_slice = self.visit_neighbors_out(next_edge_pointers, edges_index);
+    //                match neighbor_slice.iter().any(|&v| check_found(u16::from(v))) {
+    //                    true => break true,
+    //                    false => continue,
+    //                };
+    //            }
+    //            None => {
+    //                break false;
+    //            }
+    //        }
+    //    }
+    //}
 }
 
-/// Our ad-hoc DFS stack. We use a massively oversized stack and keep a None value at the 0th index
-/// to get some small optimizations. I haven't measured but this definitely beats a vector.
-#[derive(Debug)]
+/// A minimal, branchless, cache-efficient circular queue with push_back and pop_front operations.
 pub struct BfsQueue {
-    buf: Box<[NonZeroU16; SEARCH_STACK_SIZE]>,
-    front_ptr: u16,
-    back_ptr: u16,
+    buf: Box<[NonZeroU16; SEARCH_QUEUE_SIZE]>,
+    ptr: usize,
+    len: usize,
 }
 
 impl Default for BfsQueue {
@@ -260,41 +213,35 @@ impl Default for BfsQueue {
 impl BfsQueue {
     pub fn new() -> Self {
         BfsQueue {
-            // SAFETY: NonZeroU16 is valid as long as it's greater than 0.
-            buf: Box::new([unsafe { NonZeroU16::new_unchecked(1) }; SEARCH_STACK_SIZE]),
-            front_ptr: 0,
-            back_ptr: 0,
+            buf: Box::new([NonZeroU16::new(1).unwrap(); SEARCH_QUEUE_SIZE]),
+            ptr: 0,
+            len: 0,
         }
     }
 
-    pub fn push(&mut self, n: u16) {
+    pub fn push_back(&mut self, n: u16) {
+        debug_assert!(self.len < (SEARCH_QUEUE_SIZE - 1));
+        self.len = self.len & (SEARCH_QUEUE_SIZE - 1);
+        let offset = self.ptr.saturating_add(self.len) & (SEARCH_QUEUE_SIZE - 1);
         // SAFETY: We statically ensure every node index that would get pushed on here is > 0
-        self.buf[self.back_ptr as usize] = unsafe { NonZeroU16::new_unchecked(n) };
-        self.back_ptr = self.back_ptr.saturating_add(1);
+        self.buf[offset] = unsafe { NonZeroU16::new_unchecked(n) };
+        self.len = self.len.saturating_add(1);
     }
 
-    pub fn push_slice(&mut self, s: &[u16]) {
-        s.iter().for_each(|&n| {
-            // SAFETY: We statically ensure every node index that would get pushed on here is > 0
-            self.buf[self.back_ptr as usize] = unsafe { NonZeroU16::new_unchecked(n) };
-            self.back_ptr = self.back_ptr.saturating_add(1);
-        });
-    }
+    pub fn pop_front(&mut self) -> Option<NonZeroU16> {
+        self.len = self.len & (SEARCH_QUEUE_SIZE - 1);
+        self.ptr = self.ptr & (SEARCH_QUEUE_SIZE - 1);
+        let ret = self.buf[self.ptr..self.ptr.saturating_add((self.len > 0) as usize)]
+            .first()
+            .copied();
+        self.ptr = self.ptr.saturating_add((self.len > 0) as usize);
+        self.len = self.len.saturating_sub(1);
 
-    pub fn pop(&mut self) -> Option<NonZeroU16> {
-        match self.front_ptr == self.back_ptr {
-            true => None,
-            false => {
-                let s = self.buf[self.front_ptr as usize];
-                self.front_ptr = self.front_ptr.saturating_add(1);
-
-                Some(s)
-            }
-        }
+        ret
     }
 
     pub fn clear(&mut self) {
-        self.front_ptr = 0;
-        self.back_ptr = 0;
+        self.ptr = 0;
+        self.len = 0;
     }
 }

@@ -85,8 +85,3 @@ much as possible into the type system, enforce as many invariants as we can at c
 possible, and generally try to arrange our runtime code to avoid as many branches as possible in
 safe rust while still providing an ergonomic API for library consumers. We should try to rely on
 unsafe as little as possible.
-
-In some cases where unsafe might look intuitively faster it actually hurts performance as well
-because the compiler can have less information to work with and optimize on its own. So unsafe
-should as always be carefully measured as well. One example is our `NodeCache` structure where, in
-my testing, using the "obvious" unsafe operations actually slowed the search down significantly.

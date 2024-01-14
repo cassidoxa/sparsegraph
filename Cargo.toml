@@ -25,13 +25,13 @@ name = "static_graph"
 harness = false
 
 [profile.dev]
-opt-level = 2
+opt-level = 1
 debug = true
 overflow-checks = false
 
 [profile.release]
 opt-level = 3
-debug = true
+debug = false
 rpath = false
 lto = true
 overflow-checks = false

@@ -15,7 +15,6 @@ const AUTOGEN_WARNING: &str =
     "// THIS IS AN AUTOMATICALLY GENERATED MODULE. ANY CHANGES WILL BE OVERWRITTEN.";
 const IMPORTS: &str = r#"use std::num::NonZeroU16;
 use crate::{graph::{NodeData, NodeType}, constants::{NUM_VERTICES_PADDED, NUM_EDGES_PADDED}};"#;
-// const TYPE_PREFIX: &'static str = r#"pub static STATIC_GRAPH: StaticGraph<NUM_VERTICES_PADDED, NUM_EDGES_PADDED> = StaticGraph {"#;
 
 // The distribution should produce ~38k edges. The rest will be used to randomly connect any
 // remaining unconnected nodes and then randomly placed to fill out NUM_EDGES. We use a seeded
@@ -29,19 +28,19 @@ fn main() {
     let path = "src/gen.rs";
     let (node_ptrs, node_data, edge_ptrs, edge_data) = new_random();
     let np_string = format!(
-        "pub const NODE_POINTERS: [Option<NonZeroU16>; NUM_VERTICES_PADDED] = {};",
+        "pub(crate) const NODE_POINTERS: [Option<NonZeroU16>; NUM_VERTICES_PADDED] = {};",
         ArrayFormatter(node_ptrs)
     );
     let nd_string = format!(
-        "pub const NODE_DATA: [NodeData; NUM_VERTICES_PADDED] = {};",
+        "pub(crate) const NODE_DATA: [NodeData; NUM_VERTICES_PADDED] = {};",
         ArrayFormatter(node_data)
     );
     let ep_string = format!(
-        "pub const EDGE_POINTERS: [u16; NUM_EDGES_PADDED] = {};",
+        "pub(crate) const EDGE_POINTERS: [u16; NUM_EDGES_PADDED] = {};",
         ArrayFormatter(edge_ptrs)
     );
     let ed_string = format!(
-        "pub const EDGE_DATA: [u16; NUM_EDGES_PADDED] = {};",
+        "pub(crate) const EDGE_DATA: [u16; NUM_EDGES_PADDED] = {};",
         ArrayFormatter(edge_data)
     );
     let module_string = format!(
@@ -204,10 +203,6 @@ fn new_random() -> (
                     break 'remaining;
                 }
             };
-            //match connections.insert((src, dest)) {
-            //    true => break 'remaining,
-            //    false => continue,
-            //};
         }
     }
 
@@ -265,7 +260,7 @@ fn new_random() -> (
 
     // Fill node_pointers such that we can always get a node's outgoing edges slice length with
     // node_pointers[i]..node_pointers[i + 1] and terminal edges still produce an empty slice.
-    for i in 1..NUM_VERTICES + 1 {
+    for i in 1..=NUM_VERTICES {
         match node_pointers.get_mut(i).unwrap().0 {
             Some(_) => (),
             None => {

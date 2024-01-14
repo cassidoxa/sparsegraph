@@ -1,14 +1,13 @@
 use std::num::NonZeroU16;
 
-// Also See: DfsIter's eval_logic_tree, eval_requirement, and evaluate_logical_access methods in
-// src/dfs_iter.rs
+// Also See: DfsIter's/BfsIter's eval_logic_tree, eval_requirement, and evaluate_logical_access
+// methods.
 
 /// Data structure modeling collection state. We could back this with a bitfield or something
 /// more efficient for many cases instead of effectively an array of bools, but this is sufficient
 /// for a demonstration. Generally speaking, a bitfield test is more expensive than a bool test and
 /// the difference is made up by whether we save time with cache vs memory access. So as usual, we
 /// would need to measure here.
-#[derive(Debug)]
 pub struct CollectionState {
     pub boots: bool,
     pub hammer: bool,
@@ -38,7 +37,8 @@ impl CollectionState {
 /// limit our graph operations to smaller subgraphs (e.g. single dungeons.) These are encoded here
 /// to hopefully avoid extra branches from encoding them as a separate enum higher in the main graph
 /// representation.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
+#[repr(u16)]
 pub enum Requirement {
     Open,
     Boots,
@@ -61,8 +61,8 @@ pub enum Requirement {
 /// structure once, and we can easily modify requirements, even allowing users to provide their
 /// own logic (encoded in plain text) to be placed into the backing structure and used at
 /// randomize time.
-#[derive(Debug, Copy, Clone)]
-#[repr(align(4))] // We want to guarantee this type has a width of 8, not 6.
+#[derive(Copy, Clone)]
+#[repr(align(4))]
 pub struct RequirementNode {
     pub req: Requirement,
     pub and: Option<NonZeroU16>,

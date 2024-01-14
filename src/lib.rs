@@ -1,10 +1,7 @@
 #![feature(iter_array_chunks)]
 #![feature(slice_as_chunks)]
-#![feature(unchecked_shifts)]
-#![feature(slice_split_at_unchecked)]
 //#![feature(generic_const_exprs)]
 #![allow(unused_imports)]
-//#![allow(dead_code)]
 
 pub mod bfs_iter;
 pub mod constants;
