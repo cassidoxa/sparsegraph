@@ -31,7 +31,7 @@ overflow-checks = false
 
 [profile.release]
 opt-level = 3
-debug = false
+debug = true
 rpath = false
 lto = true
 overflow-checks = false

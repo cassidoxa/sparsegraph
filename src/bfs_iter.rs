@@ -151,7 +151,6 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
             (edge_index..edge_index.saturating_add(edge_pointers.len() as u16)).step_by(1);
         edge_pointers.iter().zip(indexes).for_each(|(&n, d)| {
             if self.check_access(d) && !self.check_visited(n) {
-                // SAFETY: Every edge pointer is statically guaranteed greater than 0.
                 self.mark_visited(n);
                 self.search_queue.push_back(n);
             }
@@ -198,8 +197,10 @@ impl<const M: usize, const N: usize> Iterator for BfsIter<'_, M, N> {
 }
 
 /// A minimal, branchless, cache-efficient circular queue with push_back and pop_front operations.
+// The max length must be measured/computed such that it's never greater than or equal to the queue
+// size plus one. This lets us save time by avoiding masking it.
 pub struct BfsQueue {
-    buf: Box<[NonZeroU16; SEARCH_QUEUE_SIZE]>,
+    buf: Box<[Option<NonZeroU16>; SEARCH_QUEUE_SIZE]>,
     ptr: usize,
     len: usize,
 }
@@ -213,7 +214,7 @@ impl Default for BfsQueue {
 impl BfsQueue {
     pub fn new() -> Self {
         BfsQueue {
-            buf: Box::new([NonZeroU16::new(1).unwrap(); SEARCH_QUEUE_SIZE]),
+            buf: Box::new([NonZeroU16::new(0); SEARCH_QUEUE_SIZE]),
             ptr: 0,
             len: 0,
         }
@@ -221,20 +222,16 @@ impl BfsQueue {
 
     pub fn push_back(&mut self, n: u16) {
         debug_assert!(self.len < (SEARCH_QUEUE_SIZE - 1));
-        self.len = self.len & (SEARCH_QUEUE_SIZE - 1);
         let offset = self.ptr.saturating_add(self.len) & (SEARCH_QUEUE_SIZE - 1);
         // SAFETY: We statically ensure every node index that would get pushed on here is > 0
-        self.buf[offset] = unsafe { NonZeroU16::new_unchecked(n) };
+        self.buf[offset] = Some(unsafe { NonZeroU16::new_unchecked(n) });
         self.len = self.len.saturating_add(1);
     }
 
     pub fn pop_front(&mut self) -> Option<NonZeroU16> {
-        self.len = self.len & (SEARCH_QUEUE_SIZE - 1);
         self.ptr = self.ptr & (SEARCH_QUEUE_SIZE - 1);
-        let ret = self.buf[self.ptr..self.ptr.saturating_add((self.len > 0) as usize)]
-            .first()
-            .copied();
-        self.ptr = self.ptr.saturating_add((self.len > 0) as usize);
+        let ret = self.buf[self.ptr].take();
+        self.ptr = self.ptr.saturating_add(1);
         self.len = self.len.saturating_sub(1);
 
         ret
