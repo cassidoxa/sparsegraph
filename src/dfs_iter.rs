@@ -35,7 +35,7 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
     pub fn eval_logic_tree(&self, mut req_index: u16) -> bool {
         let mut req_node: RequirementNode;
         loop {
-            req_node = REQ_CONTAINER[req_index as usize];
+            req_node = REQ_CONTAINER[req_index];
             match self.eval_requirement(req_node.req) {
                 true => match req_node.and {
                     Some(n) => req_index = u16::from(n),
@@ -136,19 +136,20 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
     pub fn search(&mut self, node: u16) -> bool {
         match self.check_visited(node) {
             true => true,
-            false => self.any(|n| n == node),
+            false => self.any(|n| u16::from(n) == node),
         }
     }
 
     /// Takes a neighbor slice, visits accessible, unvisited neighbors, and pushes them onto the
     /// DFS stack.
-    pub fn visit_neighbors_out(&mut self, edge_pointers: &[u16], edge_index: u16) {
+    pub fn visit_neighbors_out(&mut self, edge_pointers: &[NonZeroU16], edge_index: u16) {
         let indexes =
             (edge_index..edge_index.saturating_add(edge_pointers.len() as u16)).step_by(1);
         edge_pointers.iter().zip(indexes).for_each(|(&n, d)| {
-            if self.check_access(d) && !self.check_visited(n) {
-                self.mark_visited(n);
-                self.search_stack.push(n);
+            let node_index = n.get();
+            if self.check_access(d) && !self.check_visited(node_index) {
+                self.mark_visited(node_index);
+                self.search_stack.push(node_index);
             }
         });
     }
@@ -158,39 +159,15 @@ impl<const M: usize, const N: usize> Iterator for DfsIter<'_, M, N> {
     // Returns a node's index. In a library we would also generate code such that every node
     // corresponds to a named variant of a u16-backed enum but with an iterator we only care about
     // the index.
-    type Item = u16;
+    type Item = NonZeroU16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next_node = self.search_stack.pop().map_or(0, u16::from);
+        let next_node = self.search_stack.pop();
         let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(next_node);
-        let _ = self.visit_neighbors_out(next_edge_pointers, edges_index);
+        self.visit_neighbors_out(next_edge_pointers, edges_index);
 
-        NonZeroU16::new(next_node).map(u16::from)
+        next_node
     }
-
-    // Default .any seems faster
-    //fn any<P>(&mut self, mut check_found: P) -> bool
-    //where
-    //    P: FnMut(Self::Item) -> bool,
-    //{
-    //    loop {
-    //        match self.search_stack.pop() {
-    //            Some(n) => {
-    //                let r = u16::from(n);
-    //                let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(r);
-    //                let neighbor_slice = self.visit_neighbors_out(next_edge_pointers, edges_index);
-    //                match neighbor_slice
-    //                    .iter()
-    //                    .any(|&v| check_found(v.map_or(0, u16::from)))
-    //                {
-    //                    true => break true,
-    //                    false => continue,
-    //                };
-    //            }
-    //            None => break false,
-    //        }
-    //    }
-    //}
 }
 
 /// A branchless DFS stack. We use a massively oversized stack and keep a None value at the 0th
@@ -216,6 +193,7 @@ impl DfsStack {
 
     pub fn push(&mut self, n: u16) {
         debug_assert!(self.ptr < (SEARCH_STACK_SIZE - 1));
+        debug_assert!(n > 0);
         self.ptr = self.ptr.saturating_add(1) & (SEARCH_STACK_SIZE - 1);
         // SAFETY: We statically ensure every node index that would get pushed on here is > 0
         self.buf[self.ptr] = Some(unsafe { NonZeroU16::new_unchecked(n) });

@@ -28,7 +28,7 @@ fn main() {
     let path = "src/gen.rs";
     let (node_ptrs, node_data, edge_ptrs, edge_data) = new_random();
     let np_string = format!(
-        "pub(crate) const NODE_POINTERS: [Option<NonZeroU16>; NUM_VERTICES_PADDED] = {};",
+        "pub(crate) const NODE_POINTERS: [NonZeroU16; NUM_VERTICES_PADDED] = {};",
         ArrayFormatter(node_ptrs)
     );
     let nd_string = format!(
@@ -36,7 +36,7 @@ fn main() {
         ArrayFormatter(node_data)
     );
     let ep_string = format!(
-        "pub(crate) const EDGE_POINTERS: [u16; NUM_EDGES_PADDED] = {};",
+        "pub(crate) const EDGE_POINTERS: [NonZeroU16; NUM_EDGES_PADDED] = {};",
         ArrayFormatter(edge_ptrs)
     );
     let ed_string = format!(
@@ -53,16 +53,16 @@ fn main() {
 /// Generate a new random graph that looks vaguely like our randomizer world model will. In
 /// a library we'd deserialize and process a plaintext model at compile time instead.
 fn new_random() -> (
-    [NumWrapper; NUM_VERTICES_PADDED],
+    [OptionNonZeroWrapper; NUM_VERTICES_PADDED],
     [NodeData; NUM_VERTICES_PADDED],
-    [u16; NUM_EDGES_PADDED],
+    [OptionNonZeroWrapper; NUM_EDGES_PADDED],
     [u16; NUM_EDGES_PADDED],
 ) {
     let dist = WeightedIndex::new(WEIGHTS).unwrap();
     let mut fill_done = false;
-    let mut node_pointers = [NumWrapper::DEFAULT; NUM_VERTICES_PADDED];
+    let mut node_pointers = [OptionNonZeroWrapper::DEFAULT; NUM_VERTICES_PADDED];
     let node_data = [NodeData::DEFAULT; NUM_VERTICES_PADDED];
-    let mut edge_pointers = [0; NUM_EDGES_PADDED];
+    let mut edge_pointers = [OptionNonZeroWrapper::DEFAULT; NUM_EDGES_PADDED];
     let mut edge_data = [0; NUM_EDGES_PADDED];
 
     // We don't want any edge duplicates
@@ -224,11 +224,11 @@ fn new_random() -> (
             .collect();
         assert!(these_edges.len() <= 13);
         node_pointers[i] = match these_edges.is_empty() {
-            false => NumWrapper(Some(NonZeroU16::new(edge_cursor).unwrap())),
-            true => NumWrapper(None),
+            false => OptionNonZeroWrapper(Some(NonZeroU16::new(edge_cursor).unwrap())),
+            true => OptionNonZeroWrapper(None),
         };
         these_edges.iter().for_each(|x| {
-            edge_pointers[edge_cursor as usize] = x.1;
+            edge_pointers[edge_cursor as usize].0 = NonZeroU16::new(x.1);
             edge_cursor += 1
         })
     }
@@ -238,22 +238,25 @@ fn new_random() -> (
     let mut final_node_pointer_pos = 0;
     for i in 1..=NUM_VERTICES {
         match node_pointers[i] {
-            NumWrapper(Some(_)) => {
+            OptionNonZeroWrapper(Some(_)) => {
                 final_node_pointer_pos = i;
             }
-            NumWrapper(None) => continue,
+            OptionNonZeroWrapper(None) => continue,
         }
     }
-    let final_edge_index = u16::from(node_pointers[final_node_pointer_pos].0.unwrap());
-    let terminal_edge_position_offset = edge_pointers[final_edge_index as usize + 1..]
+    let final_edge_set_index = u16::from(node_pointers[final_node_pointer_pos].0.unwrap());
+    let terminal_edge_position_offset = edge_pointers[final_edge_set_index as usize + 1..]
         .iter()
-        .position(|&x| x == 0) // Neither array can point into zeroth position of other
+        .position(|&x| x.0.is_none())
         .unwrap();
-    let terminal_edge_position = (final_edge_index + 1) + terminal_edge_position_offset as u16;
-    node_pointers[NUM_VERTICES + 1] = NumWrapper(NonZeroU16::new(terminal_edge_position));
+    let terminal_edge_position = (final_edge_set_index + 1) + terminal_edge_position_offset as u16;
+    node_pointers[NUM_VERTICES + 1] = OptionNonZeroWrapper(NonZeroU16::new(terminal_edge_position));
 
     // No edge can actually point to our terminal node_pointers value.
-    let edge_ptr_set: HashSet<u16> = edge_pointers[1..NUM_EDGES].iter().copied().collect();
+    let edge_ptr_set: HashSet<u16> = edge_pointers[1..NUM_EDGES]
+        .iter()
+        .map(|x| x.0.map_or(1, u16::from))
+        .collect();
 
     assert!(!edge_ptr_set.contains(&(NUM_VERTICES as u16 + 1)));
     assert!(!edge_ptr_set.contains(&(0)));
@@ -302,15 +305,19 @@ fn new_random() -> (
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-struct NumWrapper(Option<NonZeroU16>);
+struct OptionNonZeroWrapper(Option<NonZeroU16>);
 
-impl NumWrapper {
-    const DEFAULT: NumWrapper = NumWrapper(None);
+impl OptionNonZeroWrapper {
+    const DEFAULT: OptionNonZeroWrapper = OptionNonZeroWrapper(None);
 }
 
-impl std::fmt::Display for NumWrapper {
+impl std::fmt::Display for OptionNonZeroWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NonZeroU16::new({})", self.0.map_or(0u16, u16::from))
+        write!(
+            f,
+            "unsafe {{ NonZeroU16::new_unchecked({}) }}",
+            self.0.map_or(1u16, u16::from)
+        )
     }
 }
 

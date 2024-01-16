@@ -1,4 +1,4 @@
-use std::num::NonZeroU16;
+use std::{num::NonZeroU16, ops::Index};
 
 // Also See: DfsIter's/BfsIter's eval_logic_tree, eval_requirement, and evaluate_logical_access
 // methods.
@@ -69,6 +69,18 @@ pub struct RequirementNode {
     pub or: Option<NonZeroU16>,
 }
 
+/// A generic newtype array wrapper that holds our RequirementNode trees.
+#[repr(transparent)]
+pub struct ReqArray<const N: usize>([RequirementNode; N]);
+
+impl<const N: usize> Index<u16> for ReqArray<N> {
+    type Output = RequirementNode;
+
+    fn index(&self, idx: u16) -> &Self::Output {
+        &self.0[idx as usize]
+    }
+}
+
 /// A simple logic container for a small graph. We hard code a handful of single and combined
 /// requirements in here to simulate logic evaluation. If we look at how DfsIter implements the
 /// evaluation as well and compare to the typical approach of opaque functions that take
@@ -82,7 +94,7 @@ pub struct RequirementNode {
 /// This structure would probably be a constant associated with StaticGraph where StaticGraph
 /// implements some broader trait RandomizerGraph so a world model could be more flexible with how
 /// it holds this information where appropriate or necessary.
-pub static REQ_CONTAINER: [RequirementNode; 7] = [
+pub static REQ_CONTAINER: ReqArray<7> = ReqArray([
     // Indexes:
     // 0 = open
     // 1 = locked
@@ -132,4 +144,4 @@ pub static REQ_CONTAINER: [RequirementNode; 7] = [
         and: None,
         or: None,
     },
-];
+]);

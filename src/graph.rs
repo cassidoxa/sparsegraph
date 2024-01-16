@@ -1,4 +1,7 @@
-use std::num::NonZeroU16;
+use std::{
+    num::NonZeroU16,
+    ops::{Deref, Index, Range},
+};
 
 use crate::{
     bfs_iter::{BfsIter, BfsQueue},
@@ -9,10 +12,10 @@ use crate::{
 
 /// Our main graph representation. Primarily represented by an offset array where the value for
 /// vertex Vx at index x is an index into our outgoing edges array. Combined with the value at
-/// V(x+1) we can get a slice &[u16] containing indexes for connected nodes or an empty slice if
-/// the node has no outgoing edges. The length of the edge_pointers sub slice containing all
-/// of Vx's outgoing edges is this index subtracted from the next numerical index. The values in
-/// the second edge array are indexes back into the first that point to a connected vertex.
+/// V(x+1) we can get a slice &[NonZeroU16] containing indexes for connected nodes or an empty
+/// slice if the node has no outgoing edges. The length of the edge_pointers sub slice containing
+/// all of Vx's outgoing edges is this index subtracted from the next numerical index. The values
+/// in the second edge array are indexes back into the first that point to a connected vertex.
 /// Additional arrays are present for metadata whose values map to identical indexes for each
 /// vertex and edge.
 ///
@@ -24,13 +27,20 @@ use crate::{
 /// most bounds checks where we might be doing hundreds of thousands of array accesses or more.
 /// Despite being "static" in size, this graph representation allows
 pub struct StaticGraph<const M: usize, const N: usize> {
-    pub node_pointers: Box<[Option<NonZeroU16>; M]>,
-    pub node_data: Box<[NodeData; M]>,
-    pub edge_pointers: Box<[u16; N]>,
-    pub edge_data: Box<[u16; N]>,
+    pub(crate) node_pointers: NodeIndexArray<M>,
+    pub(crate) node_data: Box<[NodeData; M]>,
+    pub(crate) edge_pointers: EdgeIndexArray<N>,
+    pub(crate) edge_data: Box<[u16; N]>,
 }
 
 impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
+    // This can be any index into node_pointers for a node with no outgoing neighbors. It should be
+    // zero because we use it as an alternative value for when the search stack/queue pops None
+    // in our .next implementations which the compiler should be able to trivially map to zero.
+    // This means that self.node_pointers[0] should always be equal to self.node_pointers[1] so
+    // self.get_neighbors_out will return an empty slice.
+    const TERMINAL_NODE_INDEX: usize = 0;
+
     /// This gives us a data structure implementing Iterator that traverses the graph with a depth-
     /// first search.
     pub fn dfs_iter(&'graph self) -> DfsIter<'graph, M, N> {
@@ -70,35 +80,45 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
     /// Get a new zeroed graph.
     pub fn new_zeroed() -> Self {
         StaticGraph {
-            node_pointers: Box::new([None; M]),
+            // SAFETY: Not zero.
+            node_pointers: NodeIndexArray(Box::new([unsafe { NonZeroU16::new_unchecked(1) }; M])),
             node_data: Box::new([NodeData::DEFAULT; M]),
-            edge_pointers: Box::new([0u16; N]),
+            // SAFETY: Not zero.
+            edge_pointers: EdgeIndexArray(Box::new([unsafe { NonZeroU16::new_unchecked(1) }; N])),
             edge_data: Box::new([0u16; N]),
         }
     }
 
     /// Get a slice containing a node's outgoing edges and the index of the first edge.
     /// Returns an empty slice if node has no outgoing edges.
-    pub fn get_neighbors_out(&'graph self, v: u16) -> (&'graph [u16], u16) {
+    pub fn get_neighbors_out(&'graph self, n: Option<NonZeroU16>) -> (&'graph [NonZeroU16], u16) {
         // This function relies on the following assumptions:
         // 1. That we place a terminating value in self.node_pointers that will give us the
         // length of the last edge sub-slice in .edge_pointers.
         // 2. That no two nodes point to the same edge sub-slice.
         // 3. That every value in self.node_pointers is greater than or equal to every value
         //    preceding it.
+        let node_index = n.map_or(self.terminal(), u16::from);
+        let start = self.node_pointers[node_index];
+        let end = self.node_pointers[node_index.saturating_add(1)];
 
-        let end = self.node_pointers[v.saturating_add(1) as usize].map_or(0, u16::from);
-        let start = self.node_pointers[v as usize].map_or(0, u16::from);
-
-        // SAFETY: We statically ensure the value at any node index in self.node_pointers is
-        // greater than or equal to the values at prior indexes.
+        // This generates better code than the safe version where we avoid a branch by computing
+        // one side of the range arithmetically.
+        //
+        // SAFETY: We statically ensure that no value in node_pointers indexes out of range and
+        // that every value is greater than or equal to values at lower indexes.
+        debug_assert!(start <= end);
         (
             unsafe {
                 self.edge_pointers
-                    .get_unchecked(start as usize..end as usize)
+                    .get_unchecked(u16::from(start) as usize..u16::from(end) as usize)
             },
-            start,
+            u16::from(start),
         )
+    }
+
+    pub const fn terminal(&self) -> u16 {
+        Self::TERMINAL_NODE_INDEX as u16
     }
 }
 
@@ -106,9 +126,9 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
 pub fn new_static_graph() -> StaticGraph<NUM_VERTICES_PADDED, NUM_EDGES_PADDED> {
     use crate::gen::*;
     StaticGraph {
-        node_pointers: Box::new(NODE_POINTERS),
+        node_pointers: NodeIndexArray(Box::new(NODE_POINTERS)),
         node_data: Box::new(NODE_DATA),
-        edge_pointers: Box::new(EDGE_POINTERS),
+        edge_pointers: EdgeIndexArray(Box::new(EDGE_POINTERS)),
         edge_data: Box::new(EDGE_DATA),
     }
 }
@@ -118,10 +138,72 @@ pub fn new_static_graph() -> StaticGraph<NUM_VERTICES_PADDED, NUM_EDGES_PADDED> 
 pub fn new_static_graph_open() -> StaticGraph<NUM_VERTICES_PADDED, NUM_EDGES_PADDED> {
     use crate::gen::*;
     StaticGraph {
-        node_pointers: Box::new(NODE_POINTERS),
+        node_pointers: NodeIndexArray(Box::new(NODE_POINTERS)),
         node_data: Box::new(NODE_DATA),
-        edge_pointers: Box::new(EDGE_POINTERS),
+        edge_pointers: EdgeIndexArray(Box::new(EDGE_POINTERS)),
         edge_data: Box::new([0u16; NUM_EDGES_PADDED]),
+    }
+}
+
+#[repr(transparent)]
+pub(crate) struct NodeIndexArray<const M: usize>(Box<[NonZeroU16; M]>);
+
+impl<const M: usize> Index<u16> for NodeIndexArray<M> {
+    type Output = NonZeroU16;
+
+    fn index(&self, idx: u16) -> &Self::Output {
+        &self.0[idx as usize]
+    }
+}
+
+impl<const M: usize> Index<NonZeroU16> for NodeIndexArray<M> {
+    type Output = NonZeroU16;
+
+    fn index(&self, idx: NonZeroU16) -> &Self::Output {
+        &self.0[u16::from(idx) as usize]
+    }
+}
+
+impl<const M: usize> Deref for NodeIndexArray<M> {
+    type Target = [NonZeroU16; M];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.deref()
+    }
+}
+
+#[repr(transparent)]
+pub(crate) struct EdgeIndexArray<const N: usize>(Box<[NonZeroU16; N]>);
+
+impl<const N: usize> Index<u16> for EdgeIndexArray<N> {
+    type Output = NonZeroU16;
+
+    fn index(&self, idx: u16) -> &Self::Output {
+        &self.0[idx as usize]
+    }
+}
+
+impl<const N: usize> Index<NonZeroU16> for EdgeIndexArray<N> {
+    type Output = NonZeroU16;
+
+    fn index(&self, idx: NonZeroU16) -> &Self::Output {
+        &self.0[u16::from(idx) as usize]
+    }
+}
+
+impl<const N: usize> Index<Range<NonZeroU16>> for EdgeIndexArray<N> {
+    type Output = [NonZeroU16];
+
+    fn index(&self, range: Range<NonZeroU16>) -> &Self::Output {
+        &self.0[u16::from(range.start) as usize..u16::from(range.end) as usize]
+    }
+}
+
+impl<const N: usize> Deref for EdgeIndexArray<N> {
+    type Target = [NonZeroU16; N];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.deref()
     }
 }
 
@@ -162,6 +244,7 @@ pub enum NodeType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     pub fn new_graph() {
@@ -178,23 +261,31 @@ mod tests {
 
     #[test]
     fn test_connected_dfs() {
+        let mut node_set = HashSet::with_capacity(NUM_VERTICES);
         let mut graph = new_static_graph_open();
         graph.edge_data = Box::new([0u16; NUM_EDGES_PADDED]); // No logic
         let mut dfs_iter = graph.dfs_iter();
         for _ in 1..=NUM_VERTICES {
-            assert!(dfs_iter.next().is_some());
+            let next_node = dfs_iter.next();
+            assert!(next_node.is_some());
+            node_set.insert(u16::from(next_node.unwrap()));
         }
+        assert_eq!(node_set.len(), NUM_VERTICES);
         assert_eq!(None, dfs_iter.next());
     }
 
     #[test]
     fn test_connected_bfs() {
+        let mut node_set = HashSet::with_capacity(NUM_VERTICES);
         let mut graph = new_static_graph_open();
         graph.edge_data = Box::new([0u16; NUM_EDGES_PADDED]); // No logic
         let mut bfs_iter = graph.bfs_iter();
         for _ in 1..=NUM_VERTICES {
-            assert!(bfs_iter.next().is_some());
+            let next_node = bfs_iter.next();
+            assert!(next_node.is_some());
+            node_set.insert(u16::from(next_node.unwrap()));
         }
+        assert_eq!(node_set.len(), NUM_VERTICES);
         assert_eq!(None, bfs_iter.next());
     }
 
@@ -202,10 +293,10 @@ mod tests {
     //#[test]
     //fn manual_test() {
     //    let graph = new_static_graph_open();
-    //    let mut dfs_iter = graph.bfs_iter();
+    //    let mut bfs_iter = graph.dfs_iter();
     //    println!("Manual test:");
-    //    println!("n: {:?}", &graph.node_pointers);
-    //    println!("e: {:?}\n", &graph.edge_pointers);
+    //    println!("n: {:?}", &graph.node_pointers.0);
+    //    println!("e: {:?}\n", &graph.edge_pointers.0);
     //    for _ in 1..=20005 as u16 {
     //        println!("next_node: {:?}", bfs_iter.next());
     //    }
