@@ -10,15 +10,19 @@ fn bfs_bench(c: &mut Criterion) {
     let graph = new_static_graph();
     let _graph_open = new_static_graph_open();
 
-    let mut bfs_iter_next = graph.bfs_iter();
-    c.bench_function("BFS Iterator .next()", |b| b.iter(|| bfs_iter_next.next()));
+    c.bench_function("BFS Iterator .next()", |b| {
+        b.iter_batched_ref(
+            || graph.bfs_iter(),
+            |bfs_iter| bfs_iter.next(),
+            criterion::BatchSize::SmallInput,
+        )
+    });
 
-    let (edge_pointers, edges_index) = black_box(graph.get_neighbors_out(ROOT_INDEX));
-    c.bench_function("BFS Visit Outgoing Neighbors", |b| {
+    c.bench_function("BFS Visit And Push Outgoing Neighbors", |b| {
         b.iter_batched_ref(
             || graph.bfs_iter(),
             |bfs_iter| {
-                bfs_iter.visit_neighbors_out(edge_pointers, edges_index);
+                bfs_iter.visit_neighbors_out(ROOT_INDEX);
             },
             criterion::BatchSize::SmallInput,
         )

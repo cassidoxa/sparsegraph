@@ -10,15 +10,19 @@ fn dfs_bench(c: &mut Criterion) {
     let graph = new_static_graph();
     let _graph_open = new_static_graph_open();
 
-    let mut dfs_iter_next = graph.dfs_iter();
-    c.bench_function("DFS Iterator .next()", |b| b.iter(|| dfs_iter_next.next()));
+    c.bench_function("DFS Iterator .next()", |b| {
+        b.iter_batched_ref(
+            || graph.dfs_iter(),
+            |dfs_iter| dfs_iter.next(),
+            criterion::BatchSize::SmallInput,
+        )
+    });
 
-    let (edge_pointers, edges_index) = black_box(graph.get_neighbors_out(ROOT_INDEX));
-    c.bench_function("DFS Visit Outgoing Neighbors", |b| {
+    c.bench_function("DFS Visit And Push Outgoing Neighbors", |b| {
         b.iter_batched_ref(
             || graph.dfs_iter(),
             |dfs_iter| {
-                dfs_iter.visit_neighbors_out(edge_pointers, edges_index);
+                dfs_iter.visit_neighbors_out(ROOT_INDEX);
             },
             criterion::BatchSize::SmallInput,
         )

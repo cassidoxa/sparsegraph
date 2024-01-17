@@ -144,16 +144,16 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
         self.mark_visited(self.root);
     }
 
-    /// Takes a neighbor slice, visits accessible, unvisited neighbors, and pushes them onto the
-    /// BFS queue.
-    pub fn visit_neighbors_out(&mut self, edge_pointers: &[NonZeroU16], edge_index: u16) {
-        let indexes =
-            (edge_index..edge_index.saturating_add(edge_pointers.len() as u16)).step_by(1);
-        edge_pointers.iter().zip(indexes).for_each(|(&n, d)| {
-            let node_index = n.get();
-            if self.check_access(d) && !self.check_visited(node_index) {
-                self.mark_visited(node_index);
+    /// Visits a node's unvisited, accessible, outgoing neighbors and pushes them onto the BFS
+    /// queue.
+    pub fn visit_neighbors_out(&mut self, node: Option<NonZeroU16>) {
+        let (edge_pointers, edge_offset) = self.graph.get_neighbors_out(node);
+        edge_pointers.iter().enumerate().for_each(|(i, &n)| {
+            let node_index = u16::from(n);
+            let edge_index = edge_offset.saturating_add(i as u16);
+            if self.check_access(edge_index) && !self.check_visited(node_index) {
                 self.search_queue.push_back(node_index);
+                self.mark_visited(node_index);
             }
         });
     }
@@ -167,8 +167,7 @@ impl<const M: usize, const N: usize> Iterator for BfsIter<'_, M, N> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next_node = self.search_queue.pop_front();
-        let (next_edge_pointers, edges_index) = self.graph.get_neighbors_out(next_node);
-        self.visit_neighbors_out(next_edge_pointers, edges_index);
+        self.visit_neighbors_out(next_node);
 
         next_node
     }
@@ -200,10 +199,8 @@ impl BfsQueue {
 
     pub fn push_back(&mut self, n: u16) {
         debug_assert!(self.len < (SEARCH_QUEUE_SIZE - 1));
-        debug_assert!(n > 0);
         let offset = self.ptr.saturating_add(self.len) & (SEARCH_QUEUE_SIZE - 1);
-        // SAFETY: We statically ensure every node index that would get pushed on here is > 0
-        self.buf[offset] = Some(unsafe { NonZeroU16::new_unchecked(n) });
+        self.buf[offset] = NonZeroU16::new(n);
         self.len = self.len.saturating_add(1);
     }
 
@@ -219,5 +216,13 @@ impl BfsQueue {
     pub fn clear(&mut self) {
         self.ptr = 0;
         self.len = 0;
+    }
+}
+
+impl Iterator for BfsQueue {
+    type Item = NonZeroU16;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pop_front()
     }
 }

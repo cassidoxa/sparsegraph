@@ -74,12 +74,10 @@ fn new_random() -> (
     let mut visited = [false; NUM_VERTICES];
     let node_set: HashSet<u16> = (1..=NUM_VERTICES as u16).step_by(1).collect();
 
-    // The zeroth node is our default root. Randomly choose a number of outgoing edges from 1-4,
-    // push our first frontier onto the queue, then loop for the rest
-
+    // The first node is our default root. Let's just give it three edges (to simulate a menu or
+    // something.)
     let mut root_frontier: HashSet<u16> = HashSet::new();
     let root_edge_count = 3;
-    //let root_edge_count = rng.gen_range(1..4);
     for _ in 0..root_edge_count {
         'root_frontier: loop {
             let dest: u16 = rng.gen_range(2..17);

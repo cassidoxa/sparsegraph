@@ -18,10 +18,10 @@ pub const NUM_EDGES_PADDED: usize = u16::MAX as usize + 1;
 
 // These could be const generics which could trade uglier library code for a nicer public
 // interface.
-pub const VISITED_BITFIELD_LEN: usize = NUM_VERTICES_PADDED >> 6;
+pub const VISITED_BITFIELD_LEN: usize = 32768 >> 6;
 pub const ACCESS_BITFIELD_LEN: usize = NUM_EDGES_PADDED >> 6;
 
 // These should be a power of two. We use a runtime bitmask to avoid branches on our stack and
 // queue.
 pub const SEARCH_STACK_SIZE: usize = 4096;
-pub const SEARCH_QUEUE_SIZE: usize = 128;
+pub const SEARCH_QUEUE_SIZE: usize = 256;

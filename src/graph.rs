@@ -293,7 +293,7 @@ mod tests {
     //#[test]
     //fn manual_test() {
     //    let graph = new_static_graph_open();
-    //    let mut bfs_iter = graph.dfs_iter();
+    //    let mut bfs_iter = graph.bfs_iter();
     //    println!("Manual test:");
     //    println!("n: {:?}", &graph.node_pointers.0);
     //    println!("e: {:?}\n", &graph.edge_pointers.0);
