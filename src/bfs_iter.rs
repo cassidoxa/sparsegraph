@@ -106,7 +106,7 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
     pub fn check_access(&self, idx: u16) -> bool {
         // https://godbolt.org/z/YjjWqrvv1
         let bit_index = idx as u32 & 0x0000003F;
-        let bitfield_index = (idx as usize) >> 6;
+        let bitfield_index = idx as usize >> 6;
         let bitmask = Self::BITMASK_CUR >> bit_index;
 
         (self.edge_access[bitfield_index] & bitmask) != 0
@@ -114,7 +114,7 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
 
     pub fn check_visited(&self, idx: u16) -> bool {
         let bit_index = idx as u32 & 0x0000003F;
-        let bitfield_index = idx as usize >> 6;
+        let bitfield_index = ((idx as usize) >> 6) & 0x1FF;
         let bitmask = Self::BITMASK_CUR >> bit_index;
 
         (self.visited[bitfield_index] & bitmask) != 0
@@ -122,8 +122,8 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
 
     pub fn mark_visited(&mut self, idx: u16) {
         // https://godbolt.org/z/MePKean13
-        let bitfield_index = (idx as usize) >> 6;
         let bit_index = idx as u32 & 0x0000003F;
+        let bitfield_index = ((idx as usize) >> 6) & 0x1FF;
         let bitmask = Self::BITMASK_CUR >> bit_index;
 
         self.visited[bitfield_index] |= bitmask;
