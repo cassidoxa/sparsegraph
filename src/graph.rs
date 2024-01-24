@@ -1,6 +1,6 @@
 use std::{
     num::NonZeroU16,
-    ops::{Deref, Index, Range},
+    ops::{Deref, DerefMut, Index, IndexMut, Range},
 };
 
 use crate::{
@@ -49,12 +49,12 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
             root: 1,
             search_stack: DfsStack::new(),
             collection_state: CollectionState::default(),
-            visited: Box::new([0u64; VISITED_BITFIELD_LEN]),
-            edge_access: Box::new([0u64; ACCESS_BITFIELD_LEN]),
+            visited: VisitedCache::<VISITED_BITFIELD_LEN>::new(),
+            edge_access: AccessCache::<ACCESS_BITFIELD_LEN>::new(),
         };
         dfs_iter.evaluate_logical_access();
         dfs_iter.search_stack.push(dfs_iter.root);
-        dfs_iter.mark_visited(dfs_iter.root);
+        dfs_iter.visited.mark_visited(dfs_iter.root);
 
         dfs_iter
     }
@@ -67,12 +67,12 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
             root: 1,
             search_queue: BfsQueue::new(),
             collection_state: CollectionState::default(),
-            visited: Box::new([0u64; VISITED_BITFIELD_LEN]),
-            edge_access: Box::new([0u64; ACCESS_BITFIELD_LEN]),
+            visited: VisitedCache::<VISITED_BITFIELD_LEN>::new(),
+            edge_access: AccessCache::<ACCESS_BITFIELD_LEN>::new(),
         };
         bfs_iter.evaluate_logical_access();
         bfs_iter.search_queue.push_back(bfs_iter.root);
-        bfs_iter.mark_visited(bfs_iter.root);
+        bfs_iter.visited.mark_visited(bfs_iter.root);
 
         bfs_iter
     }
@@ -239,6 +239,127 @@ pub enum NodeType {
     Place, // ie: "Region" in ER, a logically distinct place where the player can just "be."
     Item,
     Door,
+}
+
+#[repr(transparent)]
+pub struct AccessCache<const N: usize>(Box<[u64; N]>);
+
+impl<const N: usize> AccessCache<N> {
+    const BITMASK_CUR: u64 = 0x80000000_00000000;
+
+    pub fn new() -> Self {
+        AccessCache(Box::new([0; N]))
+    }
+
+    pub fn check_access(&self, idx: u16) -> bool {
+        let bit_index = (idx & 0x003F) as u32;
+        let bitfield_index = idx >> 6;
+        let bitmask = Self::BITMASK_CUR >> bit_index;
+
+        (self[bitfield_index] & bitmask) != 0
+    }
+}
+
+impl<const N: usize> Index<u16> for AccessCache<N> {
+    type Output = u64;
+
+    fn index(&self, idx: u16) -> &Self::Output {
+        &self.0[idx as usize]
+    }
+}
+
+impl<const N: usize> Index<usize> for AccessCache<N> {
+    type Output = u64;
+
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.0[idx]
+    }
+}
+
+impl<const N: usize> IndexMut<u16> for AccessCache<N> {
+    fn index_mut(&mut self, idx: u16) -> &mut Self::Output {
+        &mut self.0[idx as usize]
+    }
+}
+
+impl<const N: usize> IndexMut<usize> for AccessCache<N> {
+    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+        &mut self.0[idx]
+    }
+}
+
+impl<const N: usize> Deref for AccessCache<N> {
+    type Target = [u64; N];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.deref()
+    }
+}
+
+#[repr(transparent)]
+pub struct VisitedCache<const M: usize>(Box<[u64; M]>);
+
+impl<const M: usize> VisitedCache<M> {
+    const BITMASK_CUR: u64 = 0x80000000_00000000;
+
+    pub fn new() -> Self {
+        VisitedCache(Box::new([0; M]))
+    }
+
+    pub fn check_visited(&self, idx: u16) -> bool {
+        let bit_index = idx as u32 & 0x003F;
+        let bitfield_index = (idx >> 6) & 0x1FF;
+        let bitmask = Self::BITMASK_CUR >> bit_index;
+
+        (self[bitfield_index] & bitmask) != 0
+    }
+
+    pub fn mark_visited(&mut self, idx: u16) {
+        // https://godbolt.org/z/MePKean13
+        let bit_index = idx as u32 & 0x003F;
+        let bitfield_index = (idx >> 6) & 0x1FF;
+        let bitmask = Self::BITMASK_CUR >> bit_index;
+
+        self[bitfield_index] |= bitmask;
+    }
+
+    pub fn test_set_visited(&mut self, idx: u16) -> bool {
+        let bit_index = idx as u32 & 0x003F;
+        let bitfield_index = (idx >> 6) & 0x1FF;
+        let bitmask = Self::BITMASK_CUR >> bit_index;
+        let previously_visited = (self[bitfield_index] & bitmask) != 0;
+        self[bitfield_index] |= bitmask;
+
+        previously_visited
+    }
+}
+
+impl<const M: usize> Index<u16> for VisitedCache<M> {
+    type Output = u64;
+
+    fn index(&self, idx: u16) -> &Self::Output {
+        &self.0[idx as usize]
+    }
+}
+
+impl<const M: usize> IndexMut<u16> for VisitedCache<M> {
+    fn index_mut(&mut self, idx: u16) -> &mut Self::Output {
+        &mut self.0[idx as usize]
+    }
+}
+
+impl<const M: usize> Deref for VisitedCache<M> {
+    type Target = [u64; M];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl<const M: usize> DerefMut for VisitedCache<M> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.deref_mut()
+    }
 }
 
 #[cfg(test)]

@@ -35,7 +35,7 @@ fn dfs_bench(c: &mut Criterion) {
 
     let dfs_iter_check_visited = graph.dfs_iter();
     c.bench_function("DFS Check Node Visited", |b| {
-        b.iter(|| dfs_iter_check_visited.check_visited(1))
+        b.iter(|| dfs_iter_check_visited.visited.check_visited(1))
     });
 }
 
@@ -49,7 +49,7 @@ fn dfs_searches(c: &mut Criterion) {
     group.bench_function("DFS Deep Search", |b| {
         b.iter_batched_ref(
             || graph.dfs_iter(),
-            |dfs| dfs.search(black_box(19999)),
+            |dfs| dfs.search(black_box(19995)),
             criterion::BatchSize::SmallInput,
         )
     });

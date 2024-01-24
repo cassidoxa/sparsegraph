@@ -35,7 +35,7 @@ fn bfs_bench(c: &mut Criterion) {
 
     let bfs_iter_check_visited = graph.bfs_iter();
     c.bench_function("BFS Check Node Visited", |b| {
-        b.iter(|| bfs_iter_check_visited.check_visited(1))
+        b.iter(|| bfs_iter_check_visited.visited.check_visited(1))
     });
 }
 
@@ -49,7 +49,7 @@ fn bfs_searches(c: &mut Criterion) {
     group.bench_function("BFS Deep Search", |b| {
         b.iter_batched_ref(
             || graph.bfs_iter(),
-            |bfs| bfs.search(black_box(19999)),
+            |bfs| bfs.search(black_box(19995)),
             criterion::BatchSize::SmallInput,
         )
     });

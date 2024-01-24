@@ -27,25 +27,18 @@ harness = false
 [profile.dev]
 opt-level = 1
 debug = true
-overflow-checks = false
 
 [profile.release]
-opt-level = 3
 debug = false
-rpath = false
 lto = true
-overflow-checks = false
 debug-assertions = false
 codegen-units = 1
 panic = "abort"
-strip = "symbols"
+strip = true
 
 [profile.bench]
-opt-level = 3
 debug = false
-rpath = false
 lto = true
-overflow-checks = false
 debug-assertions = false
 codegen-units = 1
-strip = "symbols"
+strip = true

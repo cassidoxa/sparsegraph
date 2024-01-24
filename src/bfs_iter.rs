@@ -4,7 +4,7 @@ use std::num::NonZeroU16;
 
 use crate::{
     constants::*,
-    graph::StaticGraph,
+    graph::{AccessCache, StaticGraph, VisitedCache},
     logic::{CollectionState, Requirement, RequirementNode, REQ_CONTAINER},
 };
 
@@ -16,8 +16,8 @@ pub struct BfsIter<'graph, const M: usize, const N: usize> {
     pub root: u16,
     pub search_queue: BfsQueue,
     pub collection_state: CollectionState,
-    pub visited: Box<[u64; VISITED_BITFIELD_LEN]>,
-    pub edge_access: Box<[u64; ACCESS_BITFIELD_LEN]>,
+    pub visited: VisitedCache<VISITED_BITFIELD_LEN>,
+    pub edge_access: AccessCache<ACCESS_BITFIELD_LEN>,
 }
 
 impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
@@ -101,37 +101,9 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
         });
     }
 
-    /// We have a series of helper methods for checking and setting our bitfields that signify
-    /// whether and edge has been visited or can be traversed based on any logical constraints.
-    pub fn check_access(&self, idx: u16) -> bool {
-        // https://godbolt.org/z/YjjWqrvv1
-        let bit_index = idx as u32 & 0x0000003F;
-        let bitfield_index = idx as usize >> 6;
-        let bitmask = Self::BITMASK_CUR >> bit_index;
-
-        (self.edge_access[bitfield_index] & bitmask) != 0
-    }
-
-    pub fn check_visited(&self, idx: u16) -> bool {
-        let bit_index = idx as u32 & 0x0000003F;
-        let bitfield_index = ((idx as usize) >> 6) & 0x1FF;
-        let bitmask = Self::BITMASK_CUR >> bit_index;
-
-        (self.visited[bitfield_index] & bitmask) != 0
-    }
-
-    pub fn mark_visited(&mut self, idx: u16) {
-        // https://godbolt.org/z/MePKean13
-        let bit_index = idx as u32 & 0x0000003F;
-        let bitfield_index = ((idx as usize) >> 6) & 0x1FF;
-        let bitmask = Self::BITMASK_CUR >> bit_index;
-
-        self.visited[bitfield_index] |= bitmask;
-    }
-
     /// Returns whether a node is reachable or not, checking previous traversals first.
     pub fn search(&mut self, node: u16) -> bool {
-        match self.check_visited(node) {
+        match self.visited.check_visited(node) {
             true => true,
             false => self.any(|n| u16::from(n) == node),
         }
@@ -141,21 +113,27 @@ impl<const M: usize, const N: usize> BfsIter<'_, M, N> {
         *self.visited = [0u64; VISITED_BITFIELD_LEN];
         self.search_queue.clear();
         self.search_queue.push_back(self.root);
-        self.mark_visited(self.root);
+        self.visited.mark_visited(self.root);
     }
 
     /// Visits a node's unvisited, accessible, outgoing neighbors and pushes them onto the BFS
     /// queue.
     pub fn visit_neighbors_out(&mut self, node: Option<NonZeroU16>) {
         let (edge_pointers, edge_offset) = self.graph.get_neighbors_out(node);
-        edge_pointers.iter().enumerate().for_each(|(i, &n)| {
-            let node_index = u16::from(n);
-            let edge_index = edge_offset.saturating_add(i as u16);
-            if self.check_access(edge_index) && !self.check_visited(node_index) {
-                self.search_queue.push_back(node_index);
-                self.mark_visited(node_index);
-            }
-        });
+        edge_pointers
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                let edge_index = edge_offset.saturating_add(*i as u16);
+                self.edge_access.check_access(edge_index)
+            })
+            .for_each(|(_, &n)| {
+                let node_index = u16::from(n);
+                match self.visited.test_set_visited(node_index) {
+                    false => self.search_queue.push_back(node_index),
+                    true => (),
+                };
+            });
     }
 }
 
@@ -165,6 +143,7 @@ impl<const M: usize, const N: usize> Iterator for BfsIter<'_, M, N> {
     // the index.
     type Item = NonZeroU16;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let next_node = self.search_queue.pop_front();
         self.visit_neighbors_out(next_node);
@@ -197,6 +176,7 @@ impl BfsQueue {
         }
     }
 
+    #[inline]
     pub fn push_back(&mut self, n: u16) {
         debug_assert!(self.len < (SEARCH_QUEUE_SIZE - 1));
         let offset = self.ptr.saturating_add(self.len) & (SEARCH_QUEUE_SIZE - 1);
@@ -204,6 +184,7 @@ impl BfsQueue {
         self.len = self.len.saturating_add(1);
     }
 
+    #[inline]
     pub fn pop_front(&mut self) -> Option<NonZeroU16> {
         self.ptr = self.ptr & (SEARCH_QUEUE_SIZE - 1);
         let ret = self.buf[self.ptr].take();
@@ -213,6 +194,7 @@ impl BfsQueue {
         ret
     }
 
+    #[inline]
     pub fn clear(&mut self) {
         self.ptr = 0;
         self.len = 0;
@@ -222,6 +204,7 @@ impl BfsQueue {
 impl Iterator for BfsQueue {
     type Item = NonZeroU16;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.pop_front()
     }

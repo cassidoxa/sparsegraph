@@ -1,6 +1,4 @@
-#![feature(iter_array_chunks)]
 #![feature(slice_as_chunks)]
-//#![feature(generic_const_exprs)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
