@@ -27,6 +27,7 @@ harness = false
 [profile.dev]
 opt-level = 1
 debug = true
+overflow-checks = false
 
 [profile.release]
 debug = false

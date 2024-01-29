@@ -111,10 +111,10 @@ fn new_random() -> (
                     let x = {
                         if near_prob >= 990 {
                             dest_min = dest_min.saturating_sub(128);
-                            dest_max = min(NUM_VERTICES, dest_max + 256);
-                        } else if near_prob >= 940 {
+                            dest_max = min(NUM_VERTICES, dest_max + 128);
+                        } else if near_prob >= 960 {
                             dest_min = dest_min.saturating_sub(32);
-                            dest_max = min(NUM_VERTICES, dest_max + 64);
+                            dest_max = min(NUM_VERTICES, dest_max + 32);
                         }
                         rng.gen_range(dest_min..dest_max)
                     };
@@ -160,11 +160,11 @@ fn new_random() -> (
         let src: u16 = 'src: loop {
             let x = {
                 if near_prob >= 990 {
-                    src_min = src_min.saturating_sub(256);
-                    src_max = min(NUM_VERTICES, src_max + 256);
+                    src_min = src_min.saturating_sub(128);
+                    src_max = min(NUM_VERTICES, src_max + 128);
                 } else if near_prob >= 940 {
-                    src_min = src_min.saturating_sub(64);
-                    src_max = min(NUM_VERTICES, src_max + 64);
+                    src_min = src_min.saturating_sub(32);
+                    src_max = min(NUM_VERTICES, src_max + 32);
                 }
                 rng.gen_range(src_min..src_max)
             };

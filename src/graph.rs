@@ -100,7 +100,7 @@ impl<'graph, const M: usize, const N: usize> StaticGraph<M, N> {
         //    preceding it.
         let node_index = n.map_or(self.terminal(), u16::from);
         let start = self.node_pointers[node_index];
-        let end = self.node_pointers[node_index.saturating_add(1)];
+        let end = self.node_pointers[(node_index + 1) & (NUM_VERTICES_PADDED - 1) as u16];
 
         // This generates better code than the safe version where we avoid a branch by computing
         // one side of the range arithmetically.

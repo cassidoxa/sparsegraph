@@ -25,3 +25,10 @@ pub const ACCESS_BITFIELD_LEN: usize = NUM_EDGES_PADDED >> 6;
 // queue.
 pub const SEARCH_STACK_SIZE: usize = 4096;
 pub const SEARCH_QUEUE_SIZE: usize = 256;
+
+const _: () = {
+    assert!(NUM_VERTICES_PADDED.is_power_of_two());
+    assert!(NUM_EDGES_PADDED.is_power_of_two());
+    assert!(SEARCH_STACK_SIZE.is_power_of_two());
+    assert!(SEARCH_QUEUE_SIZE.is_power_of_two());
+};

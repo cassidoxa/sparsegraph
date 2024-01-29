@@ -1,8 +1,11 @@
 use std::num::NonZeroU16;
 
-use sparsegraph::graph::{new_static_graph, new_static_graph_open};
+use sparsegraph::{
+    dfs_iter::DfsStack,
+    graph::{new_static_graph, new_static_graph_open},
+};
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 static ROOT_INDEX: Option<NonZeroU16> = NonZeroU16::new(1);
 
@@ -37,34 +40,34 @@ fn dfs_bench(c: &mut Criterion) {
     c.bench_function("DFS Check Node Visited", |b| {
         b.iter(|| dfs_iter_check_visited.visited.check_visited(1))
     });
-}
 
-fn dfs_searches(c: &mut Criterion) {
-    let mut group = c.benchmark_group("DFS Searches");
-    group.sample_size(60);
-
-    let graph = new_static_graph();
-    let _graph_open = new_static_graph_open();
-
-    group.bench_function("DFS Deep Search", |b| {
+    c.bench_function("DFS Stack Push", |b| {
         b.iter_batched_ref(
-            || graph.dfs_iter(),
-            |dfs| dfs.search(black_box(19995)),
+            || DfsStack::new(),
+            |dfs_stack| {
+                dfs_stack.push(1);
+            },
             criterion::BatchSize::SmallInput,
         )
     });
 
-    group.bench_function("DFS Shallow Search", |b| {
+    let dfs_stack_pushed = || -> DfsStack {
+        let mut dfs_stack = DfsStack::new();
+        dfs_stack.push(1);
+
+        dfs_stack
+    };
+
+    c.bench_function("DFS Stack Pop", |b| {
         b.iter_batched_ref(
-            || graph.dfs_iter(),
-            |dfs| dfs.search(black_box(100)),
+            dfs_stack_pushed,
+            |dfs_stack| {
+                dfs_stack.pop();
+            },
             criterion::BatchSize::SmallInput,
         )
     });
-
-    group.finish();
 }
 
 criterion_group!(benches, dfs_bench);
-criterion_group!(searches, dfs_searches);
-criterion_main!(benches, searches);
+criterion_main!(benches);

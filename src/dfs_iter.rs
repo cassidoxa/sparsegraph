@@ -122,7 +122,7 @@ impl<const M: usize, const N: usize> DfsIter<'_, M, N> {
             .iter()
             .enumerate()
             .filter(|(i, _)| {
-                let edge_index = edge_offset.saturating_add(*i as u16);
+                let edge_index = edge_offset + *i as u16;
                 self.edge_access.check_access(edge_index)
             })
             .for_each(|(_, &n)| {
@@ -174,7 +174,7 @@ impl DfsStack {
     #[inline]
     pub fn push(&mut self, n: u16) {
         debug_assert!(self.ptr < (SEARCH_STACK_SIZE - 1));
-        self.ptr = self.ptr.saturating_add(1) & (SEARCH_STACK_SIZE - 1);
+        self.ptr = (self.ptr + 1) & (SEARCH_STACK_SIZE - 1);
         self.buf[self.ptr] = NonZeroU16::new(n);
     }
 
@@ -182,7 +182,7 @@ impl DfsStack {
     pub fn pop(&mut self) -> Option<NonZeroU16> {
         self.ptr = self.ptr & (SEARCH_STACK_SIZE - 1);
         let s = self.buf[self.ptr];
-        self.ptr = self.ptr.saturating_sub(1);
+        self.ptr -= 1;
 
         s
     }
