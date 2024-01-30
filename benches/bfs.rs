@@ -5,7 +5,7 @@ use sparsegraph::{
     graph::{new_static_graph, new_static_graph_open},
 };
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 static ROOT_INDEX: Option<NonZeroU16> = NonZeroU16::new(1);
 
@@ -41,32 +41,20 @@ fn bfs_bench(c: &mut Criterion) {
         b.iter(|| bfs_iter_check_visited.visited.check_visited(1))
     });
 
-    c.bench_function("BFS Queue Push Back", |b| {
+    c.bench_function("BFS Queue Push and Pop", |b| {
         b.iter_batched_ref(
             || BfsQueue::new(),
             |bfs_queue| {
-                bfs_queue.push_back(1);
+                push_and_pop(bfs_queue);
             },
             criterion::BatchSize::SmallInput,
         )
     });
+}
 
-    let bfs_queue_pushed = || -> BfsQueue {
-        let mut bfs_queue = BfsQueue::new();
-        bfs_queue.push_back(1);
-
-        bfs_queue
-    };
-
-    c.bench_function("BFS Queue Pop Front", |b| {
-        b.iter_batched_ref(
-            bfs_queue_pushed,
-            |bfs_queue| {
-                bfs_queue.pop_front();
-            },
-            criterion::BatchSize::SmallInput,
-        )
-    });
+fn push_and_pop(queue: &mut BfsQueue) {
+    queue.push_back(black_box(1));
+    queue.pop_front();
 }
 
 criterion_group!(benches, bfs_bench);

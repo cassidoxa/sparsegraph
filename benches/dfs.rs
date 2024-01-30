@@ -5,7 +5,7 @@ use sparsegraph::{
     graph::{new_static_graph, new_static_graph_open},
 };
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 static ROOT_INDEX: Option<NonZeroU16> = NonZeroU16::new(1);
 
@@ -41,32 +41,20 @@ fn dfs_bench(c: &mut Criterion) {
         b.iter(|| dfs_iter_check_visited.visited.check_visited(1))
     });
 
-    c.bench_function("DFS Stack Push", |b| {
+    c.bench_function("DFS Stack Push and Pop", |b| {
         b.iter_batched_ref(
             || DfsStack::new(),
             |dfs_stack| {
-                dfs_stack.push(1);
+                push_and_pop(dfs_stack);
             },
             criterion::BatchSize::SmallInput,
         )
     });
+}
 
-    let dfs_stack_pushed = || -> DfsStack {
-        let mut dfs_stack = DfsStack::new();
-        dfs_stack.push(1);
-
-        dfs_stack
-    };
-
-    c.bench_function("DFS Stack Pop", |b| {
-        b.iter_batched_ref(
-            dfs_stack_pushed,
-            |dfs_stack| {
-                dfs_stack.pop();
-            },
-            criterion::BatchSize::SmallInput,
-        )
-    });
+fn push_and_pop(stack: &mut DfsStack) {
+    stack.push(black_box(1));
+    stack.pop();
 }
 
 criterion_group!(benches, dfs_bench);
