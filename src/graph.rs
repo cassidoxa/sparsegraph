@@ -168,7 +168,7 @@ impl<const M: usize> Deref for NodeIndexArray<M> {
     type Target = [NonZeroU16; M];
 
     fn deref(&self) -> &Self::Target {
-        &self.0.deref()
+        self.0.deref()
     }
 }
 
@@ -203,7 +203,7 @@ impl<const N: usize> Deref for EdgeIndexArray<N> {
     type Target = [NonZeroU16; N];
 
     fn deref(&self) -> &Self::Target {
-        &self.0.deref()
+        self.0.deref()
     }
 }
 
@@ -243,6 +243,12 @@ pub enum NodeType {
 
 #[repr(transparent)]
 pub struct AccessCache<const N: usize>(Box<[u64; N]>);
+
+impl<const N: usize> Default for AccessCache<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl<const N: usize> AccessCache<N> {
     const BITMASK_CUR: u64 = 0x80000000_00000000;
@@ -292,12 +298,18 @@ impl<const N: usize> Deref for AccessCache<N> {
     type Target = [u64; N];
 
     fn deref(&self) -> &Self::Target {
-        &self.0.deref()
+        self.0.deref()
     }
 }
 
 #[repr(transparent)]
 pub struct VisitedCache<const M: usize>(Box<[u64; M]>);
+
+impl<const M: usize> Default for VisitedCache<M> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl<const M: usize> VisitedCache<M> {
     const BITMASK_CUR: u64 = 0x80000000_00000000;

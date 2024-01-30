@@ -214,14 +214,19 @@ fn new_random() -> (
     connections_vec.sort();
     // This has to be one.
     let mut edge_cursor: u16 = 1;
-    for i in 1..=NUM_VERTICES {
+    for (i, node_pointer) in node_pointers
+        .iter_mut()
+        .enumerate()
+        .take(NUM_VERTICES + 1)
+        .skip(1)
+    {
         let these_edges: Vec<(u16, u16)> = connections_vec
             .iter()
             .filter(|x| x.0 as usize == i)
             .copied()
             .collect();
         assert!(these_edges.len() <= 13);
-        node_pointers[i] = match these_edges.is_empty() {
+        *node_pointer = match these_edges.is_empty() {
             false => OptionNonZeroWrapper(Some(NonZeroU16::new(edge_cursor).unwrap())),
             true => OptionNonZeroWrapper(None),
         };
@@ -234,8 +239,13 @@ fn new_random() -> (
     // The last non_terminal node in the graph needs to have the next index in node_pointers
     // written.
     let mut final_node_pointer_pos = 0;
-    for i in 1..=NUM_VERTICES {
-        match node_pointers[i] {
+    for (i, node_pointer) in node_pointers
+        .iter()
+        .enumerate()
+        .take(NUM_VERTICES + 1)
+        .skip(1)
+    {
+        match *node_pointer {
             OptionNonZeroWrapper(Some(_)) => {
                 final_node_pointer_pos = i;
             }

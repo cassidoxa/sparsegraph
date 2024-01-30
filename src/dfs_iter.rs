@@ -180,7 +180,7 @@ impl DfsStack {
 
     #[inline]
     pub fn pop(&mut self) -> Option<NonZeroU16> {
-        self.ptr = self.ptr & (SEARCH_STACK_SIZE - 1);
+        self.ptr &= SEARCH_STACK_SIZE - 1;
         let s = self.buf[self.ptr];
         self.ptr -= 1;
 

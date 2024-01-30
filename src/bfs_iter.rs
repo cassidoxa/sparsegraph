@@ -186,7 +186,7 @@ impl BfsQueue {
 
     #[inline]
     pub fn pop_front(&mut self) -> Option<NonZeroU16> {
-        self.ptr = self.ptr & (SEARCH_QUEUE_SIZE - 1);
+        self.ptr &= SEARCH_QUEUE_SIZE - 1;
         let ret = self.buf[self.ptr].take();
         self.ptr += 1;
         self.len -= 1;
