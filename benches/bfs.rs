@@ -31,11 +31,6 @@ fn bfs_bench(c: &mut Criterion) {
         )
     });
 
-    let mut bfs_iter_logic = graph.bfs_iter();
-    c.bench_function("BFS Evaluate All Logic", |b| {
-        b.iter(|| bfs_iter_logic.evaluate_logical_access())
-    });
-
     let bfs_iter_check_visited = graph.bfs_iter();
     c.bench_function("BFS Check Node Visited", |b| {
         b.iter(|| bfs_iter_check_visited.visited.check_visited(1))

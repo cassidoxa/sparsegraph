@@ -31,11 +31,6 @@ fn dfs_bench(c: &mut Criterion) {
         )
     });
 
-    let mut dfs_iter_logic = graph.dfs_iter();
-    c.bench_function("DFS Evaluate All Logic", |b| {
-        b.iter(|| dfs_iter_logic.evaluate_logical_access())
-    });
-
     let dfs_iter_check_visited = graph.dfs_iter();
     c.bench_function("DFS Check Node Visited", |b| {
         b.iter(|| dfs_iter_check_visited.visited.check_visited(1))
@@ -49,6 +44,15 @@ fn dfs_bench(c: &mut Criterion) {
             },
             criterion::BatchSize::SmallInput,
         )
+    });
+
+    let dfs_iter_logic = graph.dfs_iter();
+    c.bench_function("Eval Logic AND Requirement", |b| {
+        b.iter(|| dfs_iter_logic.eval_logic_tree(black_box(5)))
+    });
+
+    c.bench_function("Eval Logic OR Requirement", |b| {
+        b.iter(|| dfs_iter_logic.eval_logic_tree(black_box(2)))
     });
 }
 
