@@ -1,0 +1,20 @@
+name: sparsegraph Micro-benchmarks
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  deployments: write
+
+jobs:
+  benchmark:
+    name: Run Criterion.rs benchmark example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup
+        run: rustup toolchain update nightly
+      - name: Run benchmark
+        run: RUSTFLAGS="-C target-cpu=x86-64-v2" cargo +nightly bench
