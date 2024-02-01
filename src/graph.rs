@@ -1,4 +1,5 @@
-use std::{
+use alloc::boxed::Box;
+use core::{
     num::NonZeroU16,
     ops::{Deref, DerefMut, Index, IndexMut, Range},
 };

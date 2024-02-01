@@ -1,6 +1,9 @@
+#![cfg_attr(not(test), no_std)]
 #![feature(slice_as_chunks)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
+
+extern crate alloc;
 
 pub mod bfs_iter;
 pub mod constants;

@@ -1,11 +1,13 @@
+use alloc::boxed::Box;
+use core::{
+    num::NonZeroU16,
+    ops::{Deref, Index},
+};
+
 use crate::{
     constants::*,
     graph::{AccessCache, StaticGraph, VisitedCache},
     logic::{CollectionState, Requirement, RequirementNode, REQ_CONTAINER},
-};
-use std::{
-    num::NonZeroU16,
-    ops::{Deref, Index},
 };
 
 /// Our main traversal data structure for simulating access checking. We model a search

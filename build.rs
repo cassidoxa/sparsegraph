@@ -13,7 +13,7 @@ use rand_chacha::ChaCha20Rng;
 
 const AUTOGEN_WARNING: &str =
     "// THIS IS AN AUTOMATICALLY GENERATED MODULE. ANY CHANGES WILL BE OVERWRITTEN.";
-const IMPORTS: &str = r#"use std::num::NonZeroU16;
+const IMPORTS: &str = r#"use core::num::NonZeroU16;
 use crate::{graph::{NodeData, NodeType}, constants::{NUM_VERTICES_PADDED, NUM_EDGES_PADDED}};"#;
 
 // The distribution should produce ~38k edges. The rest will be used to randomly connect any

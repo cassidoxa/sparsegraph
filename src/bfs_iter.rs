@@ -1,6 +1,6 @@
 // A quick copy of DfsIter but using a queue for breadth-first search.
-
-use std::num::NonZeroU16;
+use alloc::boxed::Box;
+use core::num::NonZeroU16;
 
 use crate::{
     constants::*,
